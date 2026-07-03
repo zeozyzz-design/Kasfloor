@@ -1,0 +1,710 @@
+<!--
+  ================================================================
+  KASFLOOR · ERP — MÓDULO CUSTOS & PEDIDOS  (v2)
+  ================================================================
+  • Aditivo por item do pedido (divide a raspa grossa 50/50).
+  • Campos de dinheiro nas Configurações formatam em R$ ao digitar.
+  • Aba "Pedidos Salvos" (salva/carrega/exclui — guarda no navegador).
+  • Lucro e margem nas tabelas de Preços & Custos.
+  • Filtro por tipo de piso; sem seleção mostra a média geral.
+  Motor de custo validado contra a planilha real do cliente.
+  ================================================================
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KASFLOOR · Custos & Pedidos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#EBF0E7; --surface:#FFFFFF; --surface-2:#F5F8F2;
+    --ink:#16241A; --ink-2:#46584A; --ink-dim:#7C8C7E;
+    --line:#E1E8DD; --line-strong:#CCD8C6;
+    --brand:#2E8B43; --brand-deep:#1E6B30; --brand-soft:#E6F2E6;
+    --raspa-f:#2D7DD2; --raspa-g:#3A4750; --resina:#8A5CD1; --pig:#EF9A2E; --aditivo:#159A8C;
+    --pos:#1E7A34; --neg:#C0392B;
+    --radius:16px; --radius-sm:11px;
+    --shadow:0 1px 2px rgba(20,40,25,.05), 0 18px 40px -24px rgba(20,40,25,.30);
+    --display:"Space Grotesk", system-ui, sans-serif;
+    --ui:"Manrope", system-ui, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; min-height:100%; }
+  body{
+    font-family:var(--ui); color:var(--ink); line-height:1.45; -webkit-font-smoothing:antialiased;
+    background:
+      linear-gradient(135deg, rgba(46,139,67,.05) 25%, transparent 25%) -20px 0/40px 40px,
+      radial-gradient(120% 90% at 80% -10%, #F2F6EF 0%, var(--bg) 55%);
+  }
+  .wrap{ max-width:1120px; margin:0 auto; padding:clamp(16px,3.5vw,36px); }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; }
+  .brand{ display:flex; align-items:center; gap:13px; }
+  .brand .name{ font-family:var(--display); font-weight:700; font-size:22px; color:var(--brand-deep); }
+  .brand .sub{ font-size:12px; color:var(--ink-dim); margin-top:1px; }
+  .gear{ appearance:none; cursor:pointer; width:44px; height:44px; border-radius:13px; border:1px solid var(--line-strong);
+    background:var(--surface); color:var(--ink-2); display:grid; place-items:center; box-shadow:var(--shadow); transition:.15s; }
+  .gear:hover{ color:var(--brand); border-color:var(--brand); transform:rotate(35deg); }
+  .gear.active{ color:#fff; background:var(--brand); border-color:var(--brand); }
+
+  .tabs{ display:inline-flex; gap:4px; background:var(--surface-2); border:1px solid var(--line-strong);
+    border-radius:13px; padding:5px; margin-bottom:20px; flex-wrap:wrap; }
+  .tabs button{ appearance:none; border:none; cursor:pointer; background:transparent; font-family:var(--ui);
+    font-weight:600; font-size:14px; color:var(--ink-dim); padding:9px 18px; border-radius:9px; transition:.15s; }
+  .tabs button.active{ background:var(--surface); color:var(--brand-deep); box-shadow:0 1px 3px rgba(20,40,25,.12); }
+
+  .view{ display:none; } .view.active{ display:block; }
+
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:clamp(16px,2.2vw,22px); margin-bottom:18px; }
+  .card h2{ margin:0 0 3px; font-family:var(--display); font-size:13px; font-weight:600; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-dim); }
+  .card .desc{ font-size:12.5px; color:var(--ink-dim); margin:0 0 14px; }
+  .card-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+
+  .order-head, .order-row{ display:grid; gap:8px; align-items:center;
+    grid-template-columns:1.5fr .9fr .7fr .6fr .6fr .7fr .85fr .9fr auto; }
+  .order-head{ font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-dim);
+    padding:0 2px 8px; border-bottom:1px solid var(--line); }
+  .order-head .num, .order-row .num{ text-align:right; }
+  .order-row{ padding:9px 2px; border-bottom:1px solid var(--line); }
+  .order-row .out{ font-family:var(--display); font-weight:600; font-size:14px; text-align:right; font-variant-numeric:tabular-nums; }
+  .order-row .cost{ color:var(--brand-deep); font-weight:700; }
+  .adit-box{ display:flex; align-items:center; justify-content:center; }
+  .adit-box input{ width:20px; height:20px; accent-color:var(--aditivo); cursor:pointer; }
+  @media (max-width:860px){
+    .order-head{ display:none; }
+    .order-row{ grid-template-columns:1fr 1fr; gap:6px 10px; padding:14px 2px; position:relative; }
+    .order-row .cell{ min-width:0; }
+    .order-row select, .order-row input[type=number]{ width:100%; }
+    .order-row .cell::before{ content:attr(data-l); display:block; font-size:10px; font-weight:700; letter-spacing:.04em;
+      text-transform:uppercase; color:var(--ink-dim); margin-bottom:3px; }
+    .order-row .out{ text-align:left; }
+    .adit-box{ justify-content:flex-start; gap:8px; }
+    .adit-box::after{ content:"Aditivo"; font-size:13px; font-weight:600; color:var(--ink-2); }
+    .order-row .del-wrap{ position:absolute; top:10px; right:2px; }
+  }
+  .ctrl{ width:100%; font-family:var(--ui); font-size:14px; font-weight:600; color:var(--ink); background:var(--surface-2);
+    border:1px solid var(--line-strong); border-radius:9px; padding:9px 10px; appearance:none; }
+  .ctrl:focus-visible{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
+  select.ctrl{ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237C8C7E' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat; background-position:right 10px center; padding-right:26px; }
+  input.ctrl{ font-family:var(--display); }
+  .del{ appearance:none; border:none; cursor:pointer; background:transparent; color:var(--ink-dim); padding:6px; border-radius:8px; }
+  .del:hover{ color:var(--neg); background:#FBEAE8; }
+
+  .add-btn{ margin-top:14px; appearance:none; cursor:pointer; border:1px dashed var(--line-strong); background:var(--surface-2);
+    color:var(--brand-deep); font-family:var(--ui); font-weight:700; font-size:14px; padding:11px 16px; border-radius:var(--radius-sm);
+    width:100%; transition:.15s; }
+  .add-btn:hover{ border-color:var(--brand); background:var(--brand-soft); }
+
+  .save-bar{ display:flex; gap:10px; align-items:center; margin-top:16px; flex-wrap:wrap; }
+  .save-bar input{ flex:1; min-width:180px; font-family:var(--ui); font-size:14px; font-weight:600; background:var(--surface-2);
+    border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:11px 13px; }
+  .save-bar input:focus-visible{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
+  .btn{ appearance:none; cursor:pointer; border:none; background:var(--brand); color:#fff; font-family:var(--ui);
+    font-weight:700; font-size:14px; padding:11px 20px; border-radius:var(--radius-sm); transition:.15s; white-space:nowrap; }
+  .btn:hover{ background:var(--brand-deep); }
+  .btn.ghost{ background:var(--surface-2); color:var(--brand-deep); border:1px solid var(--line-strong); }
+  .btn.ghost:hover{ background:var(--brand-soft); border-color:var(--brand); }
+  .btn.danger{ background:transparent; color:var(--neg); border:1px solid #E7C6C1; }
+  .btn.danger:hover{ background:#FBEAE8; }
+
+  .swatch{ width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; margin-right:6px; }
+
+  .two-col{ display:grid; grid-template-columns:1.15fr .85fr; gap:18px; }
+  @media (max-width:820px){ .two-col{ grid-template-columns:1fr; } }
+
+  .mat-list{ display:flex; flex-direction:column; gap:9px; }
+  .mat-item{ display:flex; align-items:center; gap:11px; padding:12px 14px; border:1px solid var(--line);
+    border-radius:var(--radius-sm); background:var(--surface); }
+  .mat-item .dot{ width:12px; height:12px; border-radius:4px; flex:none; }
+  .mat-item .nm{ font-size:14px; font-weight:600; color:var(--ink-2); }
+  .mat-item .kg{ margin-left:auto; font-family:var(--display); font-weight:700; font-size:16px; font-variant-numeric:tabular-nums; }
+  .mat-item .kg .u{ font-size:11px; color:var(--ink-dim); font-weight:600; margin-left:2px; }
+  .subhead{ font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-dim); margin:16px 0 9px; }
+
+  .totals{ display:flex; flex-direction:column; gap:10px; }
+  .trow{ display:flex; justify-content:space-between; align-items:baseline; font-size:14px; color:var(--ink-2); }
+  .trow .v{ font-family:var(--display); font-weight:600; font-variant-numeric:tabular-nums; color:var(--ink); }
+  .grand .lbl{ font-size:13px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-dim); }
+  .grand .v{ font-family:var(--display); font-weight:700; font-size:30px; color:var(--brand-deep); }
+
+  .bar{ height:12px; border-radius:6px; overflow:hidden; display:flex; margin:14px 0 6px; background:var(--surface-2); border:1px solid var(--line); }
+  .bar span{ height:100%; }
+  .bar-leg{ display:flex; flex-wrap:wrap; gap:6px 14px; font-size:11.5px; color:var(--ink-dim); }
+  .bar-leg i{ width:9px; height:9px; border-radius:2px; display:inline-block; margin-right:4px; }
+
+  .empty{ text-align:center; color:var(--ink-dim); font-size:14px; padding:24px 0; }
+
+  .stat-row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:2px; }
+  @media (max-width:640px){ .stat-row{ grid-template-columns:1fr; } }
+  .stat{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; }
+  .stat.hero{ background:var(--brand-soft); border-color:#CBE5CC; }
+  .stat .k{ font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-dim); }
+  .stat .v{ font-family:var(--display); font-weight:700; font-size:24px; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .stat.hero .v{ color:var(--brand-deep); }
+
+  table.grid{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.grid th, table.grid td{ padding:8px 10px; border-bottom:1px solid var(--line); text-align:right; font-variant-numeric:tabular-nums; }
+  table.grid th{ font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-dim); font-weight:700; }
+  table.grid th:first-child, table.grid td:first-child{ text-align:left; font-weight:600; color:var(--ink-2); }
+  table.grid tbody tr:hover{ background:var(--surface-2); }
+  table.grid .cell-cost{ color:var(--ink-2); }
+  table.grid td small{ display:block; font-size:11px; color:var(--ink-dim); font-weight:600; }
+  table.grid .pos{ color:var(--pos); } table.grid .neg{ color:var(--neg); }
+  .scroll{ overflow-x:auto; }
+  .filter-bar{ display:flex; align-items:center; gap:10px; }
+  .filter-bar select{ max-width:280px; }
+
+  .cfg-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 22px; }
+  @media (max-width:640px){ .cfg-grid{ grid-template-columns:1fr; } }
+  .cfg-field{ display:flex; flex-direction:column; gap:5px; }
+  .cfg-field label{ font-size:12.5px; font-weight:600; color:var(--ink-2); }
+  .cfg-field .u{ font-size:11px; color:var(--ink-dim); font-weight:500; }
+  .cfg-field input{ font-family:var(--display); font-size:15px; font-weight:600; color:var(--ink); background:var(--surface-2);
+    border:1px solid var(--line-strong); border-radius:9px; padding:10px 11px; }
+  .cfg-field input:focus-visible{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
+  .cfg-field input[readonly]{ background:var(--brand-soft); color:var(--brand-deep); border-color:#CBE5CC; }
+  .cfg-sec{ font-family:var(--display); font-size:15px; color:var(--ink); margin:4px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+
+  .note{ background:var(--brand-soft); border:1px solid #CBE5CC; border-radius:var(--radius-sm); padding:12px 14px;
+    font-size:12.5px; color:var(--brand-deep); margin-bottom:16px; }
+  .note b{ font-weight:800; }
+
+  .saved-list{ display:flex; flex-direction:column; gap:12px; }
+  .saved{ display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); flex-wrap:wrap; }
+  .saved .info{ flex:1; min-width:180px; }
+  .saved .nm{ font-family:var(--display); font-weight:700; font-size:15px; color:var(--ink); }
+  .saved .meta{ font-size:12px; color:var(--ink-dim); margin-top:2px; }
+  .saved .tot{ font-family:var(--display); font-weight:700; color:var(--brand-deep); font-size:16px; }
+  .saved .acts{ display:flex; gap:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="3" y="3" width="16" height="16" rx="4" fill="#2E8B43"/>
+        <rect x="21" y="3" width="16" height="16" rx="4" fill="#7FC98A"/>
+        <rect x="3" y="21" width="16" height="16" rx="4" fill="#A7DBAE"/>
+        <rect x="21" y="21" width="16" height="16" rx="4" fill="#1E6B30"/>
+      </svg>
+      <div><div class="name">KASFLOOR</div><div class="sub">ERP · Custos &amp; Pedidos</div></div>
+    </div>
+    <button class="gear" id="gearBtn" aria-label="Configurações" title="Configurações">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button data-tab="pedido" class="active">Novo Pedido</button>
+    <button data-tab="salvos">Pedidos Salvos</button>
+    <button data-tab="precos">Preços &amp; Custos</button>
+    <button data-tab="config">Configurações</button>
+  </div>
+
+  <section class="view active" id="view-pedido">
+    <div class="card">
+      <h2>Itens do pedido</h2>
+      <p class="desc">Lance quantos produtos quiser. Aditivo divide a raspa grossa 50/50. Base por item: m² ou peças.</p>
+      <div class="order-head">
+        <div>Produto</div><div>Cor</div><div>Esp.</div><div>Adit.</div><div>Base</div><div>Qtd</div>
+        <div class="num">m²/Peças</div><div class="num">Custo</div><div></div>
+      </div>
+      <div id="orderRows"></div>
+      <button class="add-btn" id="addRow">+ Adicionar produto</button>
+      <div class="save-bar">
+        <input id="pedidoRef" type="text" placeholder="Cliente / referência do pedido (opcional)" />
+        <button class="btn" id="savePedido">Salvar pedido</button>
+        <button class="btn ghost" id="clearPedido">Limpar</button>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h2>Resumo de produção</h2>
+        <p class="desc">Matéria-prima a comprar por demanda para este pedido.</p>
+        <div id="matSummary"></div>
+      </div>
+      <div class="card">
+        <h2>Custo de produção</h2>
+        <p class="desc">Custo somado + composição.</p>
+        <div id="costSummary"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-salvos">
+    <div class="card">
+      <h2>Pedidos salvos</h2>
+      <p class="desc">Guardados neste navegador. Carregue para reabrir no Novo Pedido ou exclua.</p>
+      <div id="savedList"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-precos">
+    <div class="card">
+      <div class="card-head">
+        <div><h2>Comparativo por espessura</h2><p class="desc" style="margin-bottom:0">Venda − custo = lucro, comparado dentro de cada espessura, para o piso e a cor selecionados.</p></div>
+        <div class="filter-bar">
+          <label style="font-size:12.5px;font-weight:600;color:var(--ink-2)">Piso</label>
+          <select class="ctrl" id="filtroProduto"></select>
+          <label style="font-size:12.5px;font-weight:600;color:var(--ink-2)">Cor</label>
+          <select class="ctrl" id="filtroCor"></select>
+        </div>
+      </div>
+      <div class="scroll"><table class="grid" id="tblComparativo"></table></div>
+    </div>
+    <div class="card">
+      <h2 id="vendaTitle">Preço de venda por m²</h2>
+      <p class="desc" id="vendaDesc">Selecione um piso para editar os preços por cor e espessura.</p>
+      <div class="scroll"><table class="grid" id="tblVenda"></table></div>
+    </div>
+    <div class="card">
+      <h2>Custo e lucro por cor × espessura (R$/m²)</h2>
+      <p class="desc">Cada célula: custo de produção (cinza) e lucro (verde/vermelho).</p>
+      <div class="scroll"><table class="grid" id="tblCusto"></table></div>
+    </div>
+    <div class="card">
+      <h2>Matéria-prima por m²</h2>
+      <div class="scroll"><table class="grid" id="tblMaterial"></table></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-config">
+    <div class="note">Campos das antigas abas <b>BASE</b> e <b>Custo ADM</b>, editáveis. Valores em R$ formatam ao digitar. Ajustes recalculam tudo na hora.</div>
+    <div class="card"><div class="cfg-sec">Insumos — preço (R$/kg)</div><div class="cfg-grid" id="cfgInsumos"></div></div>
+    <div class="card"><div class="cfg-sec">Pigmentos — preço (R$/kg)</div><div class="cfg-grid" id="cfgPigmentos"></div></div>
+    <div class="card">
+      <div class="cfg-sec">Custos fixos (Custo ADM)</div>
+      <div class="cfg-grid" id="cfgFixos"></div>
+      <div class="subhead" style="margin-top:20px">Despesas administrativas mensais</div>
+      <div class="cfg-grid" id="cfgAdm"></div>
+      <div class="cfg-grid" style="margin-top:16px">
+        <div class="cfg-field"><label>Custo fixo por m² <span class="u">(calculado)</span></label><input id="admM2out" readonly /></div>
+        <div class="cfg-field"><label>Total fixo mensal <span class="u">(calculado)</span></label><input id="admTotalout" readonly /></div>
+      </div>
+    </div>
+    <div class="card"><div class="cfg-sec">Impostos sobre a venda (%)</div><div class="cfg-grid" id="cfgTaxas"></div></div>
+    <div class="card">
+      <div class="cfg-sec">Raspa por espessura (kg/m²)</div>
+      <p class="desc">Superior (raspa fina) é fixa. Inferior alimenta raspa grossa e a base da resina.</p>
+      <div class="scroll"><table class="grid" id="cfgRaspa"></table></div>
+    </div>
+    <div class="card"><div class="cfg-sec">Produtos — peças por m²</div><div class="cfg-grid" id="cfgProdutos"></div></div>
+  </section>
+</div>
+
+<script>
+/* ================================================================ CONFIG ================================================================ */
+const CONFIG = {
+  insumos: { raspaFina:2.2, raspaGrossa:2.2, aditivo:2.2, resina:23.6 },
+  resinaRatio: { superior:0.06, inferior:0.05 },
+  superiorKg: 4.5,
+  pigmentos: { preto:25.1, verde:36.5, terracota:24.5, amarelo:44.67, branco:36.5, azul:38, cinza:32.4, laranja:38.9 },
+  raspaPorEspessura: {
+    15:{grossa:8.5, resina:9.0}, 20:{grossa:13.5,resina:13.5}, 25:{grossa:18,resina:18},
+    30:{grossa:22.5,resina:22.5}, 40:{grossa:23.7,resina:23.7}, 50:{grossa:32.5,resina:32.5}, 60:{grossa:41.3,resina:41.3},
+  },
+  espessuras: [15,20,25,30,40,50,60],
+  cores: {
+    preto:    { label:"Preto",     sw:"#2B2B2B", receita:[] },
+    verde:    { label:"Verde",     sw:"#2E8B43", receita:[["verde",0.06]] },
+    terracota:{ label:"Terracota", sw:"#B5533B", receita:[["terracota",0.06]] },
+    amarelo:  { label:"Amarelo",   sw:"#E8B23A", receita:[["branco",0.03],["amarelo",0.08]] },
+    azul:     { label:"Azul",      sw:"#2D6CB5", receita:[["azul",0.06]] },
+    cinza:    { label:"Cinza",     sw:"#7A8288", receita:[["cinza",0.06]] },
+    laranja:  { label:"Laranja",   sw:"#E07B2E", receita:[["branco",0.03],["laranja",0.08]] },
+  },
+  fixos: { maoObraM2:3.54, custoIndireto:96850, maquinas:8, m2PorMaquinaHora:10, horasMes:374 },
+  adm: {
+    "Energia elétrica":25665.15, "Aluguel imóvel":10000, "IPTU":2279.28, "Telefone móvel":3554.8,
+    "Telefone fixo":720.72, "Segurança galpão":7000, "Google empresa":2000, "Google crédito":4000,
+    "Sistema Tiny":300, "Sistema TOTVS":1000, "Provedor":215.93, "Advogado":3000,
+    "Contabilidade":6000, "Água":755.97,
+  },
+  taxas: { imposto:0.15, comissao:0.05, desconto:0.05 },
+  produtos: [
+    { id:"ossinho", nome:"Ossinho", pecasM2:37 },
+    { id:"lisa",    nome:"Placa Lisa", pecasM2:1 },
+    { id:"wave",    nome:"Wave", pecasM2:21 },
+    { id:"tijolo",  nome:"Placa Ossinho de Tijolo", pecasM2:1 },
+    { id:"romano",  nome:"Romano", pecasM2:18 },
+    { id:"mosaico", nome:"Placa / Laje / Pedra Mosaico", pecasM2:4 },
+    { id:"street",  nome:"Street Plus", pecasM2:32 },
+    { id:"rampa",   nome:"Rampa", pecasM2:2 },
+  ],
+  // preço de venda (R$/m²) por produto × cor × espessura — carregado da planilha real
+  precoVenda: {
+    ossinho:{
+      preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7}, verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},
+      terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5}, amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},
+      azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9}, cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},
+      laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8} },
+    lisa:{
+      preto:{15:74.75,20:90.85,25:108.68,30:147.2,40:155.3,50:163.3}, verde:{15:91.3,20:106.7,25:123.2,30:148.5,40:157.3,50:179.3},
+      terracota:{15:86.9,20:102.85,25:121,30:143,40:154,50:173.8}, amarelo:{15:100.1,20:115.5,25:132,30:171.6,40:188.98,50:207.9},
+      azul:{15:84.7,20:99,25:115.5,30:144.65,40:154,50:170.5}, cinza:{15:89.1,20:103.95,25:120.45,30:147.4,40:155.1,50:179.3},
+      laranja:{15:110.1,20:125.5,25:142,30:181.6,40:198.98,50:217.9} },
+    wave:{
+      preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7}, verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},
+      terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5}, amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},
+      azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9}, cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},
+      laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8} },
+    tijolo:{},
+    romano:{
+      preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7}, verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},
+      terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5}, amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},
+      azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9}, cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},
+      laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8} },
+    mosaico:{
+      preto:{15:72.45,20:90.85,25:108.68,30:147.2,40:155.3,50:163.3}, verde:{15:91.3,20:106.7,25:123.2,30:148.5,40:157.3,50:179.3},
+      terracota:{15:86.9,20:102.85,25:121,30:143,40:154,50:173.8}, amarelo:{15:100.1,20:115.5,25:132,30:172.15,40:195.8,50:207.9},
+      azul:{15:84.7,20:99,25:115.5,30:144.65,40:154,50:176}, cinza:{15:89.1,20:103.95,25:120.45,30:147.4,40:155.1,50:176},
+      laranja:{15:110.1,20:125.5,25:142,30:182.15,40:205.8,50:217.9} },
+    street:{
+      preto:{30:167.2,40:183.7,50:214.5}, verde:{30:177.1,40:194.7,50:214.17}, terracota:{30:173.8,40:190.3,50:209},
+      amarelo:{30:196.9,40:216.59,50:236.5}, azul:{30:170.5,40:187.55,50:205.7}, cinza:{30:177.1,40:194.7,50:214.17},
+      laranja:{30:206.9,40:226.59,50:246.5} },
+    rampa:{},
+  },
+};
+
+/* ================================================================ MOTOR ================================================================ */
+function custoAdmM2(){
+  const somaAdm = Object.values(CONFIG.adm).reduce((s,v)=>s+(+v||0),0);
+  const totalMensal = somaAdm + (+CONFIG.fixos.custoIndireto||0);
+  const m2Mes = CONFIG.fixos.maquinas * CONFIG.fixos.m2PorMaquinaHora * CONFIG.fixos.horasMes;
+  return { totalMensal, porM2: m2Mes>0 ? totalMensal/m2Mes : 0 };
+}
+function pigmentoKgPorM2(cor){ const out={}; (CONFIG.cores[cor]?.receita||[]).forEach(([p,r])=>{ out[p]=(out[p]||0)+CONFIG.superiorKg*r; }); return out; }
+function custoPigmentoM2(cor){ return Object.entries(pigmentoKgPorM2(cor)).reduce((s,[p,k])=>s+k*(CONFIG.pigmentos[p]||0),0); }
+function materialPorM2(cor, esp, aditivo){
+  const inf = CONFIG.raspaPorEspessura[esp] || {grossa:0,resina:0};
+  const gCheia = inf.grossa;
+  const raspaGrossa = aditivo ? gCheia/2 : gCheia;
+  const aditKg      = aditivo ? gCheia/2 : 0;
+  const resina = CONFIG.superiorKg*CONFIG.resinaRatio.superior + inf.resina*CONFIG.resinaRatio.inferior;
+  return { raspaFina:CONFIG.superiorKg, raspaGrossa, aditivo:aditKg, resina, pigmentos:pigmentoKgPorM2(cor) };
+}
+function custoProducaoM2(cor, esp, aditivo){
+  const m = materialPorM2(cor, esp, aditivo);
+  const rf=m.raspaFina*CONFIG.insumos.raspaFina, rg=m.raspaGrossa*CONFIG.insumos.raspaGrossa,
+        ad=m.aditivo*CONFIG.insumos.aditivo, rs=m.resina*CONFIG.insumos.resina,
+        pig=custoPigmentoM2(cor), mo=CONFIG.fixos.maoObraM2, fixo=custoAdmM2().porM2;
+  return { total:rf+rg+ad+rs+pig+mo+fixo, comp:{ raspa:rf+rg+ad, resina:rs, pigmento:pig, maoObra:mo, fixo } };
+}
+function taxaVenda(){ const t=CONFIG.taxas; return t.imposto+t.comissao+t.desconto; }
+function lucroM2(cor, esp, venda){
+  const custoProd = custoProducaoM2(cor, esp, false).total;
+  const custoTotal = custoProd + venda*taxaVenda();
+  const lucro = venda>0 ? venda - custoTotal : null;
+  return { custoProd, custoTotal, lucro, margem:(venda>0 && custoTotal>0)? lucro/custoTotal*100 : null };
+}
+
+/* ================================================================ FORMATAÇÃO ================================================================ */
+const nf = (v,d=2)=> (v==null||isNaN(v))?"—":new Intl.NumberFormat("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:d}).format(v);
+const money = (v,d=2)=> "R$ "+new Intl.NumberFormat("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d}).format(v||0);
+const centsToBR = c => "R$ "+new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format((c||0)/100);
+const pigLabel = p => ({preto:"Preto",verde:"Verde",terracota:"Terracota",amarelo:"Amarelo",branco:"Branco",azul:"Azul",cinza:"Cinza",laranja:"Laranja"}[p]||p);
+const pigSw = p => (CONFIG.cores[p]?.sw)||({branco:"#E3DFD3"}[p])||"var(--pig)";
+
+/* ================================================================ PEDIDO ================================================================ */
+let pedido = [ novoItem() ];
+function novoItem(){ return { produto:"ossinho", cor:"preto", esp:15, aditivo:false, base:"m2", qtd:null }; }
+function itemM2Pecas(it){
+  const prod=CONFIG.produtos.find(p=>p.id===it.produto)||CONFIG.produtos[0];
+  let m2=0,pc=0;
+  if(it.qtd>0){ if(it.base==="m2"){ m2=it.qtd; pc=Math.floor(it.qtd*prod.pecasM2); } else { pc=it.qtd; m2=prod.pecasM2>0?it.qtd/prod.pecasM2:0; } }
+  return {m2,pc,prod};
+}
+function optProdutos(sel){ return CONFIG.produtos.map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${p.nome}</option>`).join(""); }
+function optCores(sel){ return Object.entries(CONFIG.cores).map(([k,c])=>`<option value="${k}" ${k===sel?"selected":""}>${c.label}</option>`).join(""); }
+function optEsp(sel){ return CONFIG.espessuras.map(e=>`<option value="${e}" ${e==sel?"selected":""}>${e} mm</option>`).join(""); }
+
+function renderRows(){
+  const box=document.getElementById("orderRows"); box.innerHTML="";
+  pedido.forEach((it,i)=>{
+    const {m2,pc}=itemM2Pecas(it);
+    const cM2=custoProducaoM2(it.cor,+it.esp,it.aditivo).total;
+    const saida = it.qtd>0 ? (it.base==="m2"? nf(pc)+" pç" : nf(m2,2)+" m²") : "—";
+    const row=document.createElement("div"); row.className="order-row";
+    row.innerHTML=`
+      <div class="cell" data-l="Produto"><select class="ctrl" data-i="${i}" data-k="produto">${optProdutos(it.produto)}</select></div>
+      <div class="cell" data-l="Cor"><select class="ctrl" data-i="${i}" data-k="cor">${optCores(it.cor)}</select></div>
+      <div class="cell" data-l="Espessura"><select class="ctrl" data-i="${i}" data-k="esp">${optEsp(it.esp)}</select></div>
+      <div class="cell adit-box"><input type="checkbox" data-i="${i}" data-k="aditivo" ${it.aditivo?"checked":""} aria-label="Aditivo"></div>
+      <div class="cell" data-l="Base"><select class="ctrl" data-i="${i}" data-k="base">
+        <option value="m2" ${it.base==="m2"?"selected":""}>m²</option><option value="pc" ${it.base==="pc"?"selected":""}>Peças</option></select></div>
+      <div class="cell" data-l="Qtd"><input class="ctrl" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${it.qtd??""}" data-i="${i}" data-k="qtd"></div>
+      <div class="cell out" data-l="Resultado">${saida}</div>
+      <div class="cell out cost" data-l="Custo">${it.qtd>0?money(cM2*m2):"—"}</div>
+      <div class="del-wrap"><button class="del" data-del="${i}" aria-label="Remover" title="Remover">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
+    box.appendChild(row);
+  });
+}
+function renderMatSummary(){
+  const box=document.getElementById("matSummary");
+  let rf=0,rg=0,ad=0,res=0; const pig={}; let totM2=0,totPc=0;
+  pedido.forEach(it=>{ if(!(it.qtd>0))return; const {m2,pc}=itemM2Pecas(it); totM2+=m2; totPc+=pc;
+    const m=materialPorM2(it.cor,+it.esp,it.aditivo);
+    rf+=m.raspaFina*m2; rg+=m.raspaGrossa*m2; ad+=m.aditivo*m2; res+=m.resina*m2;
+    Object.entries(m.pigmentos).forEach(([p,k])=>pig[p]=(pig[p]||0)+k*m2);
+  });
+  if(totM2<=0){ box.innerHTML=`<div class="empty">Adicione itens com quantidade para ver a matéria-prima.</div>`; return; }
+  let html=`<div class="mat-list">
+    <div class="mat-item"><span class="dot" style="background:var(--raspa-f)"></span><span class="nm">Raspa fina</span><span class="kg">${nf(rf,1)}<span class="u">kg</span></span></div>
+    <div class="mat-item"><span class="dot" style="background:var(--raspa-g)"></span><span class="nm">Raspa grossa</span><span class="kg">${nf(rg,1)}<span class="u">kg</span></span></div>`;
+  if(ad>0) html+=`<div class="mat-item"><span class="dot" style="background:var(--aditivo)"></span><span class="nm">Aditivo</span><span class="kg">${nf(ad,1)}<span class="u">kg</span></span></div>`;
+  html+=`<div class="mat-item"><span class="dot" style="background:var(--resina)"></span><span class="nm">Resina</span><span class="kg">${nf(res,2)}<span class="u">kg</span></span></div></div>`;
+  const pe=Object.entries(pig).filter(([,k])=>k>0);
+  if(pe.length){ html+=`<div class="subhead">Pigmentos</div><div class="mat-list">`;
+    pe.forEach(([p,k])=>{ html+=`<div class="mat-item"><span class="dot" style="background:${pigSw(p)}"></span><span class="nm">${pigLabel(p)}</span><span class="kg">${nf(k,2)}<span class="u">kg</span></span></div>`; });
+    html+=`</div>`; }
+  html+=`<div class="subhead">Totais</div><div class="totals">
+    <div class="trow"><span>Metragem total</span><span class="v">${nf(totM2,2)} m²</span></div>
+    <div class="trow"><span>Peças totais</span><span class="v">${nf(totPc)} pç</span></div></div>`;
+  box.innerHTML=html;
+}
+function renderCostSummary(){
+  const box=document.getElementById("costSummary");
+  let total=0; const comp={raspa:0,resina:0,pigmento:0,maoObra:0,fixo:0};
+  pedido.forEach(it=>{ if(!(it.qtd>0))return; const {m2}=itemM2Pecas(it);
+    const c=custoProducaoM2(it.cor,+it.esp,it.aditivo); total+=c.total*m2; for(const k in comp) comp[k]+=c.comp[k]*m2; });
+  if(total<=0){ box.innerHTML=`<div class="empty">Sem custo ainda.</div>`; return; }
+  const segs=[["Raspa/Aditivo",comp.raspa,"var(--raspa-g)"],["Resina",comp.resina,"var(--resina)"],["Pigmento",comp.pigmento,"var(--pig)"],["Mão de obra",comp.maoObra,"var(--brand)"],["Custo fixo",comp.fixo,"#B9C4B4"]];
+  let bar=`<div class="bar">`; segs.forEach(([,v,c])=>{ if(v>0) bar+=`<span style="width:${(v/total*100).toFixed(2)}%;background:${c}"></span>`; });
+  bar+=`</div><div class="bar-leg">`; segs.forEach(([n,v,c])=>{ if(v>0) bar+=`<span><i style="background:${c}"></i>${n} ${money(v)}</span>`; }); bar+=`</div>`;
+  box.innerHTML=`<div class="grand totals"><span class="lbl">Custo total de produção</span><div class="v" style="margin-top:4px">${money(total)}</div></div>${bar}`;
+}
+function renderPedido(){ renderRows(); renderMatSummary(); renderCostSummary(); }
+
+document.getElementById("orderRows").addEventListener("input", e=>{
+  const t=e.target; if(t.dataset.i===undefined) return;
+  const i=+t.dataset.i,k=t.dataset.k;
+  if(k==="qtd"){ const v=parseFloat(t.value.replace(",",".")); pedido[i].qtd=isNaN(v)?null:v;
+    const {m2,pc}=itemM2Pecas(pedido[i]); const cM2=custoProducaoM2(pedido[i].cor,+pedido[i].esp,pedido[i].aditivo).total;
+    const row=t.closest(".order-row"); row.querySelector(".out:not(.cost)").textContent=pedido[i].qtd>0?(pedido[i].base==="m2"?nf(pc)+" pç":nf(m2,2)+" m²"):"—";
+    row.querySelector(".cost").textContent=pedido[i].qtd>0?money(cM2*m2):"—";
+    renderMatSummary(); renderCostSummary(); return; }
+  if(k==="aditivo"){ pedido[i].aditivo=t.checked; }
+  else if(k==="esp"){ pedido[i].esp=+t.value; }
+  else pedido[i][k]=t.value;
+  renderPedido();
+});
+document.getElementById("orderRows").addEventListener("click", e=>{
+  const b=e.target.closest("[data-del]"); if(!b) return;
+  pedido.splice(+b.dataset.del,1); if(!pedido.length) pedido=[novoItem()]; renderPedido();
+});
+document.getElementById("addRow").addEventListener("click",()=>{ pedido.push(novoItem()); renderPedido(); });
+document.getElementById("clearPedido").addEventListener("click",()=>{ pedido=[novoItem()]; document.getElementById("pedidoRef").value=""; renderPedido(); });
+
+/* ================================================================ PEDIDOS SALVOS ================================================================ */
+let memPedidos=null;
+const store={
+  get(){ try{ return JSON.parse(localStorage.getItem("kasfloor_pedidos")||"[]"); }catch(e){ return memPedidos||(memPedidos=[]); } },
+  set(a){ try{ localStorage.setItem("kasfloor_pedidos", JSON.stringify(a)); }catch(e){ memPedidos=a; } }
+};
+document.getElementById("savePedido").addEventListener("click",()=>{
+  const itens=pedido.filter(it=>it.qtd>0);
+  if(!itens.length){ alert("Adicione ao menos um item com quantidade antes de salvar."); return; }
+  let totM2=0,custo=0;
+  itens.forEach(it=>{ const {m2}=itemM2Pecas(it); totM2+=m2; custo+=custoProducaoM2(it.cor,+it.esp,it.aditivo).total*m2; });
+  const lista=store.get();
+  lista.unshift({ id:Date.now(), ref:(document.getElementById("pedidoRef").value||"").trim(), data:new Date().toISOString(), itens:JSON.parse(JSON.stringify(itens)), totM2, custo });
+  store.set(lista); renderSalvos();
+  const b=document.getElementById("savePedido"); const o=b.textContent; b.textContent="Salvo ✓"; setTimeout(()=>b.textContent=o,1400);
+});
+function renderSalvos(){
+  const box=document.getElementById("savedList"); const lista=store.get();
+  if(!lista.length){ box.innerHTML=`<div class="empty">Nenhum pedido salvo ainda.</div>`; return; }
+  box.innerHTML=`<div class="saved-list">`+lista.map(p=>{
+    const d=new Date(p.data).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+    return `<div class="saved">
+      <div class="info"><div class="nm">${p.ref||"Pedido sem referência"}</div>
+        <div class="meta">${d} · ${p.itens.length} ${p.itens.length>1?"itens":"item"} · ${nf(p.totM2,2)} m²</div></div>
+      <div class="tot">${money(p.custo)}</div>
+      <div class="acts"><button class="btn ghost" data-load="${p.id}">Carregar</button><button class="btn danger" data-del-saved="${p.id}">Excluir</button></div>
+    </div>`;
+  }).join("")+`</div>`;
+}
+document.getElementById("savedList").addEventListener("click",e=>{
+  const l=e.target.closest("[data-load]"), d=e.target.closest("[data-del-saved]");
+  if(l){ const p=store.get().find(x=>x.id==l.dataset.load); if(p){ pedido=JSON.parse(JSON.stringify(p.itens)); document.getElementById("pedidoRef").value=p.ref||""; renderPedido(); showTab("pedido"); } }
+  if(d){ if(confirm("Excluir este pedido salvo?")){ store.set(store.get().filter(x=>x.id!=d.dataset.delSaved)); renderSalvos(); } }
+});
+
+/* ================================================================ PREÇOS & CUSTOS ================================================================ */
+function media(vals){ const f=vals.filter(v=>v>0); return f.length? f.reduce((a,b)=>a+b,0)/f.length : 0; }
+function vendaFor(prodId, corId, esp){
+  const cores=Object.keys(CONFIG.cores);
+  if(prodId && corId) return CONFIG.precoVenda[prodId]?.[corId]?.[esp] || 0;
+  if(prodId && !corId) return media(cores.map(c=>CONFIG.precoVenda[prodId]?.[c]?.[esp]||0));
+  if(!prodId && corId) return media(CONFIG.produtos.map(p=>CONFIG.precoVenda[p.id]?.[corId]?.[esp]||0));
+  return media(CONFIG.produtos.flatMap(p=>cores.map(c=>CONFIG.precoVenda[p.id]?.[c]?.[esp]||0)));
+}
+function custoBaseFor(corId, esp){
+  const cores=Object.keys(CONFIG.cores);
+  return corId ? custoProducaoM2(corId,esp,false).total : media(cores.map(c=>custoProducaoM2(c,esp,false).total));
+}
+function renderPrecos(){
+  const fP=document.getElementById("filtroProduto"), fC=document.getElementById("filtroCor");
+  if(!fP.options.length) fP.innerHTML=`<option value="">Todos (média)</option>`+CONFIG.produtos.map(p=>`<option value="${p.id}">${p.nome}</option>`).join("");
+  if(!fC.options.length) fC.innerHTML=`<option value="">Todas (média)</option>`+Object.entries(CONFIG.cores).map(([k,c])=>`<option value="${k}">${c.label}</option>`).join("");
+  const prodId=fP.value, corId=fC.value;
+  const cores=Object.keys(CONFIG.cores);
+
+  // comparativo por espessura (piso + cor selecionados) com coluna de encargos
+  let comp=`<thead><tr><th>Espessura</th><th>Venda /m²</th><th>Custo produção</th><th>Imp.+Com.+Desc.</th><th>Custo total</th><th>Lucro / Prejuízo</th><th>Margem</th></tr></thead><tbody>`;
+  CONFIG.espessuras.forEach(e=>{
+    const custoProd=custoBaseFor(corId,e);
+    const v=vendaFor(prodId,corId,e);
+    let enc="—",cTot="—",luc="—",marg="—",cls="";
+    if(v>0){ const encargos=v*taxaVenda(); const custoTotal=custoProd+encargos; const lucro=v-custoTotal;
+      enc=money(encargos); cTot=money(custoTotal); luc=money(lucro); marg=nf(lucro/custoTotal*100,1)+"%"; cls=lucro>=0?"pos":"neg"; }
+    comp+=`<tr><td>${e} mm</td><td>${v>0?money(v):"—"}</td><td>${money(custoProd)}</td><td>${enc}</td><td>${cTot}</td>
+      <td class="${cls}" style="font-weight:700">${luc}</td><td class="${cls}">${marg}</td></tr>`;
+  });
+  comp+=`</tbody>`;
+  document.getElementById("tblComparativo").innerHTML=comp;
+
+  // venda por cor × espessura (editável quando um piso está selecionado)
+  const editable=!!prodId;
+  document.getElementById("vendaTitle").textContent = editable ? `Preço de venda — ${CONFIG.produtos.find(p=>p.id===prodId).nome}` : "Preço de venda médio por m²";
+  document.getElementById("vendaDesc").textContent = editable ? "Editável por cor e espessura. É a base do lucro." : "Média dos pisos com preço definido. Selecione um piso para editar.";
+  let tv=`<thead><tr><th>Cor</th>${CONFIG.espessuras.map(e=>`<th>${e} mm</th>`).join("")}</tr></thead><tbody>`;
+  cores.forEach(cor=>{
+    tv+=`<tr><td><span class="swatch" style="background:${CONFIG.cores[cor].sw}"></span>${CONFIG.cores[cor].label}</td>`;
+    CONFIG.espessuras.forEach(e=>{
+      const v = editable ? (CONFIG.precoVenda[prodId]?.[cor]?.[e]||0) : vendaFor("",cor,e);
+      tv+= editable
+        ? `<td><input class="venda-inp" data-cor="${cor}" data-e="${e}" type="text" inputmode="numeric" value="${centsToBR(Math.round(v*100))}" style="width:104px;text-align:right;font-family:var(--display);font-weight:600;border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td>`
+        : `<td>${v>0?money(v):"—"}</td>`;
+    });
+    tv+=`</tr>`;
+  });
+  tv+=`</tbody>`;
+  document.getElementById("tblVenda").innerHTML=tv;
+
+  // custo e lucro por cor × espessura (cada cor com a própria venda)
+  let tc=`<thead><tr><th>Cor</th>${CONFIG.espessuras.map(e=>`<th>${e} mm</th>`).join("")}</tr></thead><tbody>`;
+  cores.forEach(cor=>{
+    tc+=`<tr><td><span class="swatch" style="background:${CONFIG.cores[cor].sw}"></span>${CONFIG.cores[cor].label}</td>`;
+    CONFIG.espessuras.forEach(e=>{
+      const custo=custoProducaoM2(cor,e,false).total; const v=vendaFor(prodId,cor,e);
+      let luc="—",cls="";
+      if(v>0){ const L=lucroM2(cor,e,v); luc=money(L.lucro); cls=L.lucro>=0?"pos":"neg"; }
+      tc+=`<td><span class="cell-cost">${money(custo)}</span><small class="${cls}">${luc}</small></td>`;
+    });
+    tc+=`</tr>`;
+  });
+  tc+=`</tbody>`;
+  document.getElementById("tblCusto").innerHTML=tc;
+
+  let tm=`<thead><tr><th>Espessura</th><th>Raspa fina</th><th>Raspa grossa</th><th>Resina</th><th>Peso total</th></tr></thead><tbody>`;
+  CONFIG.espessuras.forEach(e=>{ const m=materialPorM2("preto",e,false); const peso=m.raspaFina+m.raspaGrossa+m.resina;
+    tm+=`<tr><td>${e} mm</td><td>${nf(m.raspaFina,2)} kg</td><td>${nf(m.raspaGrossa,2)} kg</td><td>${nf(m.resina,2)} kg</td><td>${nf(peso,2)} kg</td></tr>`; });
+  tm+=`</tbody>`; document.getElementById("tblMaterial").innerHTML=tm;
+}
+document.getElementById("filtroProduto").addEventListener("change", renderPrecos);
+document.getElementById("filtroCor").addEventListener("change", renderPrecos);
+document.getElementById("tblVenda").addEventListener("input", e=>{
+  const inp=e.target; if(!inp.classList.contains("venda-inp")) return;
+  const digits=inp.value.replace(/\D/g,""); const cents=digits?parseInt(digits,10):0;
+  inp.value=centsToBR(cents);
+  const prodId=document.getElementById("filtroProduto").value, cor=inp.dataset.cor, esp=inp.dataset.e;
+  if(prodId){ (CONFIG.precoVenda[prodId] ||= {}); (CONFIG.precoVenda[prodId][cor] ||= {}); CONFIG.precoVenda[prodId][cor][esp]=cents/100; }
+  renderPrecosKeepFocus(cor,esp);
+});
+function renderPrecosKeepFocus(cor,esp){ renderPrecos(); const el=document.querySelector(`.venda-inp[data-cor="${cor}"][data-e="${esp}"]`); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
+
+/* ================================================================ CONFIGURAÇÕES ================================================================ */
+function moneyInput(initial, onChange){
+  const inp=document.createElement("input"); inp.type="text"; inp.inputMode="numeric";
+  let cents=Math.round((initial||0)*100); inp.value=centsToBR(cents);
+  inp.addEventListener("input",()=>{ const d=inp.value.replace(/\D/g,""); cents=d?parseInt(d,10):0; inp.value=centsToBR(cents); onChange(cents/100); });
+  return inp;
+}
+function numInput(initial, onChange, step="any"){
+  const inp=document.createElement("input"); inp.type="number"; inp.step=step; inp.inputMode="decimal"; inp.value=initial;
+  inp.addEventListener("input",()=>{ const v=parseFloat(inp.value.replace(",",".")); onChange(isNaN(v)?0:v); }); return inp;
+}
+function field(label,unit,input){ const w=document.createElement("div"); w.className="cfg-field";
+  w.innerHTML=`<label>${label} <span class="u">${unit||""}</span></label>`; w.appendChild(input); return w; }
+
+function renderConfig(){
+  const ci=document.getElementById("cfgInsumos"); ci.innerHTML="";
+  ci.append(
+    field("Raspa fina","R$/kg", moneyInput(CONFIG.insumos.raspaFina,v=>{CONFIG.insumos.raspaFina=v;recalcAll();})),
+    field("Raspa grossa","R$/kg", moneyInput(CONFIG.insumos.raspaGrossa,v=>{CONFIG.insumos.raspaGrossa=v;recalcAll();})),
+    field("Aditivo","R$/kg", moneyInput(CONFIG.insumos.aditivo,v=>{CONFIG.insumos.aditivo=v;recalcAll();})),
+    field("Resina","R$/kg", moneyInput(CONFIG.insumos.resina,v=>{CONFIG.insumos.resina=v;recalcAll();})),
+  );
+  const cp=document.getElementById("cfgPigmentos"); cp.innerHTML="";
+  Object.keys(CONFIG.pigmentos).forEach(p=> cp.append(field(pigLabel(p),"R$/kg", moneyInput(CONFIG.pigmentos[p],v=>{CONFIG.pigmentos[p]=v;recalcAll();}))));
+
+  const cf=document.getElementById("cfgFixos"); cf.innerHTML="";
+  cf.append(
+    field("Mão de obra direta","R$/m²", moneyInput(CONFIG.fixos.maoObraM2,v=>{CONFIG.fixos.maoObraM2=v;recalcAll();})),
+    field("Custo indireto (folha)","R$/mês", moneyInput(CONFIG.fixos.custoIndireto,v=>{CONFIG.fixos.custoIndireto=v;recalcAll();})),
+    field("Máquinas","un", numInput(CONFIG.fixos.maquinas,v=>{CONFIG.fixos.maquinas=v;recalcAll();})),
+    field("m² por máquina / hora","m²", numInput(CONFIG.fixos.m2PorMaquinaHora,v=>{CONFIG.fixos.m2PorMaquinaHora=v;recalcAll();})),
+    field("Horas / mês","h", numInput(CONFIG.fixos.horasMes,v=>{CONFIG.fixos.horasMes=v;recalcAll();})),
+  );
+  const ca=document.getElementById("cfgAdm"); ca.innerHTML="";
+  Object.keys(CONFIG.adm).forEach(nome=> ca.append(field(nome,"R$/mês", moneyInput(CONFIG.adm[nome],v=>{CONFIG.adm[nome]=v;recalcAll();}))));
+
+  const ct=document.getElementById("cfgTaxas"); ct.innerHTML="";
+  ct.append(
+    field("Imposto","%", numInput(CONFIG.taxas.imposto*100,v=>{CONFIG.taxas.imposto=v/100;recalcAll();})),
+    field("Comissão","%", numInput(CONFIG.taxas.comissao*100,v=>{CONFIG.taxas.comissao=v/100;recalcAll();})),
+    field("Desconto","%", numInput(CONFIG.taxas.desconto*100,v=>{CONFIG.taxas.desconto=v/100;recalcAll();})),
+  );
+
+  let tr=`<thead><tr><th>Espessura</th><th>Raspa fina (fixa)</th><th>Inferior · grossa</th><th>Inferior · resina</th></tr></thead><tbody>`;
+  CONFIG.espessuras.forEach(e=>{ const r=CONFIG.raspaPorEspessura[e];
+    tr+=`<tr><td>${e} mm</td><td>${nf(CONFIG.superiorKg,2)} kg</td>
+      <td><input class="cfg-raspa" data-e="${e}" data-f="grossa" type="number" step="any" value="${r.grossa}" style="width:90px;text-align:right;font-family:var(--display);border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td>
+      <td><input class="cfg-raspa" data-e="${e}" data-f="resina" type="number" step="any" value="${r.resina}" style="width:90px;text-align:right;font-family:var(--display);border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td></tr>`; });
+  tr+=`</tbody>`; document.getElementById("cfgRaspa").innerHTML=tr;
+
+  const cpr=document.getElementById("cfgProdutos"); cpr.innerHTML="";
+  CONFIG.produtos.forEach((p,i)=> cpr.append(field(p.nome,"pç/m²", numInput(p.pecasM2,v=>{CONFIG.produtos[i].pecasM2=v;recalcAll();}))));
+
+  updateAdmOut();
+}
+document.getElementById("cfgRaspa").addEventListener("input", e=>{
+  const t=e.target; if(!t.classList.contains("cfg-raspa")) return;
+  const v=parseFloat(t.value.replace(",",".")); CONFIG.raspaPorEspessura[t.dataset.e][t.dataset.f]=isNaN(v)?0:v; recalcAll();
+});
+function updateAdmOut(){ const a=custoAdmM2();
+  document.getElementById("admM2out").value=a.porM2.toFixed(4);
+  document.getElementById("admTotalout").value=new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(a.totalMensal);
+}
+function recalcAll(){ renderPedido(); renderPrecos(); updateAdmOut(); }
+
+/* ================================================================ ABAS ================================================================ */
+function showTab(tab){
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active", v.id==="view-"+tab));
+  document.getElementById("gearBtn").classList.toggle("active", tab==="config");
+  if(tab==="salvos") renderSalvos();
+}
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.tab)));
+document.getElementById("gearBtn").addEventListener("click",()=>showTab("config"));
+
+/* INÍCIO */
+renderPedido(); renderConfig(); renderPrecos(); renderSalvos();
+</script>
+</body>
+</html>
