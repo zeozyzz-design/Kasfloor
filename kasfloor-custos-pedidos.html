@@ -1,12 +1,18 @@
 <!--
   ================================================================
-  KASFLOOR · ERP — MÓDULO CUSTOS & PEDIDOS  (v2)
+  KASFLOOR · ERP  (protótipo com papéis e fluxo de aprovação)
   ================================================================
-  • Aditivo por item do pedido (divide a raspa grossa 50/50).
-  • Campos de dinheiro nas Configurações formatam em R$ ao digitar.
-  • Aba "Pedidos Salvos" (salva/carrega/exclui — guarda no navegador).
-  • Lucro e margem nas tabelas de Preços & Custos.
-  • Filtro por tipo de piso; sem seleção mostra a média geral.
+  Papéis:
+   • Master  — vê tudo, define margens, aprova orçamentos fora da
+               margem mínima, acessa Configurações e Produção.
+   • Vendedor— cria orçamentos (cliente + itens + desconto), vê só
+               valor de venda + impostos (sem custo, margem ou material).
+
+  Fluxo: Orçamento → (trava de margem) → Aprovado/Aguardando →
+         Gerar pedido → Pedidos + Produção (material só p/ Master).
+
+  Dados no localStorage (protótipo). Estrutura pronta para virar
+  backend: usuários, config, orçamentos e pedidos são coleções.
   Motor de custo validado contra a planilha real do cliente.
   ================================================================
 -->
@@ -15,7 +21,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>KASFLOOR · Custos & Pedidos</title>
+<title>KASFLOOR · ERP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -26,685 +32,681 @@
     --line:#E1E8DD; --line-strong:#CCD8C6;
     --brand:#2E8B43; --brand-deep:#1E6B30; --brand-soft:#E6F2E6;
     --raspa-f:#2D7DD2; --raspa-g:#3A4750; --resina:#8A5CD1; --pig:#EF9A2E; --aditivo:#159A8C;
-    --pos:#1E7A34; --neg:#C0392B;
+    --pos:#1E7A34; --neg:#C0392B; --warn:#B7791F; --warn-soft:#FBF3E2;
     --radius:16px; --radius-sm:11px;
     --shadow:0 1px 2px rgba(20,40,25,.05), 0 18px 40px -24px rgba(20,40,25,.30);
-    --display:"Space Grotesk", system-ui, sans-serif;
-    --ui:"Manrope", system-ui, sans-serif;
+    --display:"Space Grotesk", system-ui, sans-serif; --ui:"Manrope", system-ui, sans-serif;
   }
   *{ box-sizing:border-box; }
   html,body{ margin:0; min-height:100%; }
-  body{
-    font-family:var(--ui); color:var(--ink); line-height:1.45; -webkit-font-smoothing:antialiased;
-    background:
-      linear-gradient(135deg, rgba(46,139,67,.05) 25%, transparent 25%) -20px 0/40px 40px,
-      radial-gradient(120% 90% at 80% -10%, #F2F6EF 0%, var(--bg) 55%);
-  }
-  .wrap{ max-width:1120px; margin:0 auto; padding:clamp(16px,3.5vw,36px); }
+  body{ font-family:var(--ui); color:var(--ink); line-height:1.45; -webkit-font-smoothing:antialiased;
+    background:linear-gradient(135deg, rgba(46,139,67,.05) 25%, transparent 25%) -20px 0/40px 40px, radial-gradient(120% 90% at 80% -10%, #F2F6EF 0%, var(--bg) 55%); }
+  .wrap{ max-width:1120px; margin:0 auto; padding:clamp(16px,3.5vw,32px); }
+  .hidden{ display:none !important; }
 
-  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; }
+  /* login */
+  .login-wrap{ min-height:100vh; display:grid; place-items:center; padding:20px; }
+  .login{ width:100%; max-width:380px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:32px 28px; }
+  .login .brand{ display:flex; align-items:center; gap:12px; justify-content:center; margin-bottom:6px; }
+  .login .name{ font-family:var(--display); font-weight:700; font-size:24px; color:var(--brand-deep); }
+  .login h1{ font-family:var(--display); font-size:18px; text-align:center; color:var(--ink); margin:14px 0 22px; font-weight:600; }
+  .login label{ font-size:12.5px; font-weight:600; color:var(--ink-2); display:block; margin:0 0 5px; }
+  .login input{ width:100%; font-family:var(--ui); font-size:15px; font-weight:600; background:var(--surface-2); border:1px solid var(--line-strong); border-radius:10px; padding:11px 13px; margin-bottom:14px; }
+  .login input:focus-visible{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
+  .login .err{ color:var(--neg); font-size:13px; font-weight:600; margin:0 0 12px; min-height:18px; }
+  .login .hint{ font-size:11.5px; color:var(--ink-dim); text-align:center; margin-top:16px; line-height:1.6; }
+
+  /* topbar */
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
   .brand{ display:flex; align-items:center; gap:13px; }
-  .brand .name{ font-family:var(--display); font-weight:700; font-size:22px; color:var(--brand-deep); }
+  .brand .name{ font-family:var(--display); font-weight:700; font-size:21px; color:var(--brand-deep); }
   .brand .sub{ font-size:12px; color:var(--ink-dim); margin-top:1px; }
-  .gear{ appearance:none; cursor:pointer; width:44px; height:44px; border-radius:13px; border:1px solid var(--line-strong);
-    background:var(--surface); color:var(--ink-2); display:grid; place-items:center; box-shadow:var(--shadow); transition:.15s; }
-  .gear:hover{ color:var(--brand); border-color:var(--brand); transform:rotate(35deg); }
-  .gear.active{ color:#fff; background:var(--brand); border-color:var(--brand); }
+  .userbox{ display:flex; align-items:center; gap:12px; }
+  .userbox .who{ text-align:right; }
+  .userbox .who .u{ font-weight:700; font-size:14px; color:var(--ink); }
+  .userbox .who .r{ font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+  .r.master{ color:var(--brand-deep); } .r.vendedor{ color:var(--raspa-f); }
+  .logout{ appearance:none; cursor:pointer; border:1px solid var(--line-strong); background:var(--surface); color:var(--ink-2); font-family:var(--ui); font-weight:600; font-size:13px; padding:9px 14px; border-radius:10px; }
+  .logout:hover{ color:var(--neg); border-color:#E7C6C1; }
 
-  .tabs{ display:inline-flex; gap:4px; background:var(--surface-2); border:1px solid var(--line-strong);
-    border-radius:13px; padding:5px; margin-bottom:20px; flex-wrap:wrap; }
-  .tabs button{ appearance:none; border:none; cursor:pointer; background:transparent; font-family:var(--ui);
-    font-weight:600; font-size:14px; color:var(--ink-dim); padding:9px 18px; border-radius:9px; transition:.15s; }
+  .tabs{ display:inline-flex; gap:4px; background:var(--surface-2); border:1px solid var(--line-strong); border-radius:13px; padding:5px; margin-bottom:20px; flex-wrap:wrap; }
+  .tabs button{ appearance:none; border:none; cursor:pointer; background:transparent; font-family:var(--ui); font-weight:600; font-size:14px; color:var(--ink-dim); padding:9px 17px; border-radius:9px; transition:.15s; }
   .tabs button.active{ background:var(--surface); color:var(--brand-deep); box-shadow:0 1px 3px rgba(20,40,25,.12); }
 
   .view{ display:none; } .view.active{ display:block; }
 
-  .card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);
-    padding:clamp(16px,2.2vw,22px); margin-bottom:18px; }
-  .card h2{ margin:0 0 3px; font-family:var(--display); font-size:13px; font-weight:600; letter-spacing:.12em;
-    text-transform:uppercase; color:var(--ink-dim); }
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:clamp(16px,2.2vw,22px); margin-bottom:18px; }
+  .card-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+  .card h2{ margin:0 0 3px; font-family:var(--display); font-size:13px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-dim); }
   .card .desc{ font-size:12.5px; color:var(--ink-dim); margin:0 0 14px; }
-  .card-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 
-  .order-head, .order-row{ display:grid; gap:8px; align-items:center;
-    grid-template-columns:1.5fr .9fr .7fr .6fr .6fr .7fr .85fr .9fr auto; }
-  .order-head{ font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-dim);
-    padding:0 2px 8px; border-bottom:1px solid var(--line); }
-  .order-head .num, .order-row .num{ text-align:right; }
-  .order-row{ padding:9px 2px; border-bottom:1px solid var(--line); }
-  .order-row .out{ font-family:var(--display); font-weight:600; font-size:14px; text-align:right; font-variant-numeric:tabular-nums; }
-  .order-row .cost{ color:var(--brand-deep); font-weight:700; }
-  .adit-box{ display:flex; align-items:center; justify-content:center; }
-  .adit-box input{ width:20px; height:20px; accent-color:var(--aditivo); cursor:pointer; }
-  @media (max-width:860px){
-    .order-head{ display:none; }
-    .order-row{ grid-template-columns:1fr 1fr; gap:6px 10px; padding:14px 2px; position:relative; }
-    .order-row .cell{ min-width:0; }
-    .order-row select, .order-row input[type=number]{ width:100%; }
-    .order-row .cell::before{ content:attr(data-l); display:block; font-size:10px; font-weight:700; letter-spacing:.04em;
-      text-transform:uppercase; color:var(--ink-dim); margin-bottom:3px; }
-    .order-row .out{ text-align:left; }
-    .adit-box{ justify-content:flex-start; gap:8px; }
-    .adit-box::after{ content:"Aditivo"; font-size:13px; font-weight:600; color:var(--ink-2); }
-    .order-row .del-wrap{ position:absolute; top:10px; right:2px; }
-  }
-  .ctrl{ width:100%; font-family:var(--ui); font-size:14px; font-weight:600; color:var(--ink); background:var(--surface-2);
-    border:1px solid var(--line-strong); border-radius:9px; padding:9px 10px; appearance:none; }
-  .ctrl:focus-visible{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
-  select.ctrl{ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237C8C7E' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");
-    background-repeat:no-repeat; background-position:right 10px center; padding-right:26px; }
-  input.ctrl{ font-family:var(--display); }
-  .del{ appearance:none; border:none; cursor:pointer; background:transparent; color:var(--ink-dim); padding:6px; border-radius:8px; }
-  .del:hover{ color:var(--neg); background:#FBEAE8; }
-
-  .add-btn{ margin-top:14px; appearance:none; cursor:pointer; border:1px dashed var(--line-strong); background:var(--surface-2);
-    color:var(--brand-deep); font-family:var(--ui); font-weight:700; font-size:14px; padding:11px 16px; border-radius:var(--radius-sm);
-    width:100%; transition:.15s; }
-  .add-btn:hover{ border-color:var(--brand); background:var(--brand-soft); }
-
-  .save-bar{ display:flex; gap:10px; align-items:center; margin-top:16px; flex-wrap:wrap; }
-  .save-bar input{ flex:1; min-width:180px; font-family:var(--ui); font-size:14px; font-weight:600; background:var(--surface-2);
-    border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:11px 13px; }
-  .save-bar input:focus-visible{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
-  .btn{ appearance:none; cursor:pointer; border:none; background:var(--brand); color:#fff; font-family:var(--ui);
-    font-weight:700; font-size:14px; padding:11px 20px; border-radius:var(--radius-sm); transition:.15s; white-space:nowrap; }
+  .btn{ appearance:none; cursor:pointer; border:none; background:var(--brand); color:#fff; font-family:var(--ui); font-weight:700; font-size:14px; padding:11px 18px; border-radius:var(--radius-sm); transition:.15s; white-space:nowrap; }
   .btn:hover{ background:var(--brand-deep); }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
   .btn.ghost{ background:var(--surface-2); color:var(--brand-deep); border:1px solid var(--line-strong); }
   .btn.ghost:hover{ background:var(--brand-soft); border-color:var(--brand); }
+  .btn.sm{ padding:8px 13px; font-size:13px; }
   .btn.danger{ background:transparent; color:var(--neg); border:1px solid #E7C6C1; }
   .btn.danger:hover{ background:#FBEAE8; }
+  .btn.warn{ background:var(--warn); } .btn.warn:hover{ filter:brightness(.92); }
 
-  .swatch{ width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; margin-right:6px; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:12.5px; font-weight:600; color:var(--ink-2); }
+  .ctrl{ width:100%; font-family:var(--ui); font-size:14px; font-weight:600; color:var(--ink); background:var(--surface-2); border:1px solid var(--line-strong); border-radius:9px; padding:9px 10px; appearance:none; }
+  .ctrl:focus-visible{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
+  select.ctrl{ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237C8C7E' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>"); background-repeat:no-repeat; background-position:right 10px center; padding-right:26px; }
+  input.ctrl{ font-family:var(--display); }
 
-  .two-col{ display:grid; grid-template-columns:1.15fr .85fr; gap:18px; }
-  @media (max-width:820px){ .two-col{ grid-template-columns:1fr; } }
+  .cliente-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; }
+  @media (max-width:640px){ .cliente-grid{ grid-template-columns:1fr; } }
 
-  .mat-list{ display:flex; flex-direction:column; gap:9px; }
-  .mat-item{ display:flex; align-items:center; gap:11px; padding:12px 14px; border:1px solid var(--line);
-    border-radius:var(--radius-sm); background:var(--surface); }
-  .mat-item .dot{ width:12px; height:12px; border-radius:4px; flex:none; }
-  .mat-item .nm{ font-size:14px; font-weight:600; color:var(--ink-2); }
-  .mat-item .kg{ margin-left:auto; font-family:var(--display); font-weight:700; font-size:16px; font-variant-numeric:tabular-nums; }
-  .mat-item .kg .u{ font-size:11px; color:var(--ink-dim); font-weight:600; margin-left:2px; }
-  .subhead{ font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-dim); margin:16px 0 9px; }
+  .order-head,.order-row{ display:grid; gap:8px; align-items:center; grid-template-columns:1.6fr 1fr .8fr .7fr .8fr .95fr auto; }
+  .order-head{ font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-dim); padding:0 2px 8px; border-bottom:1px solid var(--line); }
+  .order-row{ padding:9px 2px; border-bottom:1px solid var(--line); }
+  .order-row .out{ font-family:var(--display); font-weight:600; font-size:14px; text-align:right; font-variant-numeric:tabular-nums; }
+  .order-row .venda{ color:var(--brand-deep); font-weight:700; }
+  @media (max-width:780px){
+    .order-head{ display:none; }
+    .order-row{ grid-template-columns:1fr 1fr; gap:6px 10px; padding:14px 2px; position:relative; }
+    .order-row select,.order-row input{ width:100%; }
+    .order-row .cell::before{ content:attr(data-l); display:block; font-size:10px; font-weight:700; text-transform:uppercase; color:var(--ink-dim); margin-bottom:3px; }
+    .order-row .out{ text-align:left; }
+    .order-row .del-wrap{ position:absolute; top:10px; right:2px; }
+  }
+  .del{ appearance:none; border:none; cursor:pointer; background:transparent; color:var(--ink-dim); padding:6px; border-radius:8px; }
+  .del:hover{ color:var(--neg); background:#FBEAE8; }
+  .add-btn{ margin-top:14px; cursor:pointer; border:1px dashed var(--line-strong); background:var(--surface-2); color:var(--brand-deep); font-family:var(--ui); font-weight:700; font-size:14px; padding:11px 16px; border-radius:var(--radius-sm); width:100%; }
+  .add-btn:hover{ border-color:var(--brand); background:var(--brand-soft); }
 
-  .totals{ display:flex; flex-direction:column; gap:10px; }
+  .totals{ display:flex; flex-direction:column; gap:9px; margin-top:4px; }
   .trow{ display:flex; justify-content:space-between; align-items:baseline; font-size:14px; color:var(--ink-2); }
   .trow .v{ font-family:var(--display); font-weight:600; font-variant-numeric:tabular-nums; color:var(--ink); }
-  .grand .lbl{ font-size:13px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-dim); }
-  .grand .v{ font-family:var(--display); font-weight:700; font-size:30px; color:var(--brand-deep); }
+  .trow.big{ margin-top:6px; padding-top:12px; border-top:2px solid var(--line-strong); }
+  .trow.big .v{ font-size:24px; font-weight:700; color:var(--brand-deep); }
+  .desc-row{ display:flex; align-items:center; gap:8px; }
+  .desc-row input{ width:90px; text-align:right; font-family:var(--display); font-weight:700; font-size:16px; color:var(--neg); background:var(--surface-2); border:1px solid var(--line-strong); border-radius:9px; padding:7px 9px; }
 
-  .bar{ height:12px; border-radius:6px; overflow:hidden; display:flex; margin:14px 0 6px; background:var(--surface-2); border:1px solid var(--line); }
-  .bar span{ height:100%; }
-  .bar-leg{ display:flex; flex-wrap:wrap; gap:6px 14px; font-size:11.5px; color:var(--ink-dim); }
-  .bar-leg i{ width:9px; height:9px; border-radius:2px; display:inline-block; margin-right:4px; }
+  .badge{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; padding:3px 10px; border-radius:20px; }
+  .badge.ok{ color:var(--pos); background:var(--brand-soft); }
+  .badge.wait{ color:var(--warn); background:var(--warn-soft); }
+  .badge.no{ color:var(--neg); background:#FBEAE8; }
+  .badge.done{ color:var(--raspa-f); background:#E7F0FA; }
 
-  .empty{ text-align:center; color:var(--ink-dim); font-size:14px; padding:24px 0; }
+  .row-item{ display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); flex-wrap:wrap; margin-bottom:11px; }
+  .row-item .info{ flex:1; min-width:190px; }
+  .row-item .ti{ font-family:var(--display); font-weight:700; font-size:15px; color:var(--ink); display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .row-item .meta{ font-size:12.5px; color:var(--ink-dim); margin-top:3px; }
+  .row-item .val{ font-family:var(--display); font-weight:700; font-size:17px; color:var(--brand-deep); text-align:right; }
+  .row-item .val small{ display:block; font-size:11px; font-weight:600; color:var(--ink-dim); }
+  .row-item .acts{ display:flex; gap:7px; flex-wrap:wrap; }
+  .empty{ text-align:center; color:var(--ink-dim); font-size:14px; padding:26px 0; }
 
-  .stat-row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:2px; }
-  @media (max-width:640px){ .stat-row{ grid-template-columns:1fr; } }
-  .stat{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; }
-  .stat.hero{ background:var(--brand-soft); border-color:#CBE5CC; }
-  .stat .k{ font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-dim); }
-  .stat .v{ font-family:var(--display); font-weight:700; font-size:24px; margin-top:4px; font-variant-numeric:tabular-nums; }
-  .stat.hero .v{ color:var(--brand-deep); }
+  .mat-list{ display:flex; flex-direction:column; gap:8px; }
+  .mat-item{ display:flex; align-items:center; gap:11px; padding:11px 13px; border:1px solid var(--line); border-radius:var(--radius-sm); }
+  .mat-item .dot{ width:11px; height:11px; border-radius:4px; flex:none; }
+  .mat-item .nm{ font-size:13.5px; font-weight:600; color:var(--ink-2); }
+  .mat-item .kg{ margin-left:auto; font-family:var(--display); font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; }
+  .mat-item .kg .u{ font-size:11px; color:var(--ink-dim); margin-left:2px; }
 
   table.grid{ width:100%; border-collapse:collapse; font-size:13px; }
-  table.grid th, table.grid td{ padding:8px 10px; border-bottom:1px solid var(--line); text-align:right; font-variant-numeric:tabular-nums; }
+  table.grid th,table.grid td{ padding:8px 10px; border-bottom:1px solid var(--line); text-align:right; font-variant-numeric:tabular-nums; }
   table.grid th{ font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-dim); font-weight:700; }
-  table.grid th:first-child, table.grid td:first-child{ text-align:left; font-weight:600; color:var(--ink-2); }
-  table.grid tbody tr:hover{ background:var(--surface-2); }
-  table.grid .cell-cost{ color:var(--ink-2); }
-  table.grid td small{ display:block; font-size:11px; color:var(--ink-dim); font-weight:600; }
+  table.grid th:first-child,table.grid td:first-child{ text-align:left; font-weight:600; color:var(--ink-2); }
   table.grid .pos{ color:var(--pos); } table.grid .neg{ color:var(--neg); }
+  table.grid td small{ display:block; font-size:11px; color:var(--ink-dim); font-weight:600; }
   .scroll{ overflow-x:auto; }
-  .filter-bar{ display:flex; align-items:center; gap:10px; }
-  .filter-bar select{ max-width:280px; }
+  .swatch{ width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; margin-right:5px; }
 
   .cfg-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 22px; }
   @media (max-width:640px){ .cfg-grid{ grid-template-columns:1fr; } }
   .cfg-field{ display:flex; flex-direction:column; gap:5px; }
   .cfg-field label{ font-size:12.5px; font-weight:600; color:var(--ink-2); }
-  .cfg-field .u{ font-size:11px; color:var(--ink-dim); font-weight:500; }
-  .cfg-field input{ font-family:var(--display); font-size:15px; font-weight:600; color:var(--ink); background:var(--surface-2);
-    border:1px solid var(--line-strong); border-radius:9px; padding:10px 11px; }
+  .cfg-field .u{ font-size:11px; color:var(--ink-dim); }
+  .cfg-field input{ font-family:var(--display); font-size:15px; font-weight:600; background:var(--surface-2); border:1px solid var(--line-strong); border-radius:9px; padding:10px 11px; }
   .cfg-field input:focus-visible{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
   .cfg-field input[readonly]{ background:var(--brand-soft); color:var(--brand-deep); border-color:#CBE5CC; }
-  .cfg-sec{ font-family:var(--display); font-size:15px; color:var(--ink); margin:4px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
-
-  .note{ background:var(--brand-soft); border:1px solid #CBE5CC; border-radius:var(--radius-sm); padding:12px 14px;
-    font-size:12.5px; color:var(--brand-deep); margin-bottom:16px; }
-  .note b{ font-weight:800; }
-
-  .saved-list{ display:flex; flex-direction:column; gap:12px; }
-  .saved{ display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); flex-wrap:wrap; }
-  .saved .info{ flex:1; min-width:180px; }
-  .saved .nm{ font-family:var(--display); font-weight:700; font-size:15px; color:var(--ink); }
-  .saved .meta{ font-size:12px; color:var(--ink-dim); margin-top:2px; }
-  .saved .tot{ font-family:var(--display); font-weight:700; color:var(--brand-deep); font-size:16px; }
-  .saved .acts{ display:flex; gap:8px; }
+  .cfg-sec{ font-family:var(--display); font-size:15px; margin:4px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  .note{ background:var(--brand-soft); border:1px solid #CBE5CC; border-radius:var(--radius-sm); padding:12px 14px; font-size:12.5px; color:var(--brand-deep); margin-bottom:16px; }
+  .note.warn{ background:var(--warn-soft); border-color:#EAD8B0; color:var(--warn); }
 </style>
 </head>
 <body>
-<div class="wrap">
 
+<!-- ===================== LOGIN ===================== -->
+<div class="login-wrap" id="loginScreen">
+  <form class="login" id="loginForm" autocomplete="off">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 40 40"><rect x="3" y="3" width="16" height="16" rx="4" fill="#2E8B43"/><rect x="21" y="3" width="16" height="16" rx="4" fill="#7FC98A"/><rect x="3" y="21" width="16" height="16" rx="4" fill="#A7DBAE"/><rect x="21" y="21" width="16" height="16" rx="4" fill="#1E6B30"/></svg>
+      <div class="name">KASFLOOR</div>
+    </div>
+    <h1>Acesso ao ERP</h1>
+    <label>Usuário</label>
+    <input id="loginUser" type="text" autocomplete="username" />
+    <label>Senha</label>
+    <div style="position:relative">
+      <input id="loginPass" type="password" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding-right:70px" />
+      <button type="button" id="togglePass" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--brand-deep);font-size:12px;font-weight:700;cursor:pointer;padding:4px 6px">MOSTRAR</button>
+    </div>
+    <p class="err" id="loginErr"></p>
+    <button class="btn" type="submit" style="width:100%">Entrar</button>
+    <p class="hint" id="loginHint"></p>
+  </form>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div class="wrap hidden" id="app">
   <header class="topbar">
     <div class="brand">
-      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
-        <rect x="3" y="3" width="16" height="16" rx="4" fill="#2E8B43"/>
-        <rect x="21" y="3" width="16" height="16" rx="4" fill="#7FC98A"/>
-        <rect x="3" y="21" width="16" height="16" rx="4" fill="#A7DBAE"/>
-        <rect x="21" y="21" width="16" height="16" rx="4" fill="#1E6B30"/>
-      </svg>
-      <div><div class="name">KASFLOOR</div><div class="sub">ERP · Custos &amp; Pedidos</div></div>
+      <svg width="38" height="38" viewBox="0 0 40 40"><rect x="3" y="3" width="16" height="16" rx="4" fill="#2E8B43"/><rect x="21" y="3" width="16" height="16" rx="4" fill="#7FC98A"/><rect x="3" y="21" width="16" height="16" rx="4" fill="#A7DBAE"/><rect x="21" y="21" width="16" height="16" rx="4" fill="#1E6B30"/></svg>
+      <div><div class="name">KASFLOOR</div><div class="sub">ERP · Orçamentos, Pedidos e Produção</div></div>
     </div>
-    <button class="gear" id="gearBtn" aria-label="Configurações" title="Configurações">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>
-    </button>
+    <div class="userbox">
+      <div class="who"><div class="u" id="whoName">—</div><div class="r" id="whoRole">—</div></div>
+      <button class="logout" id="logoutBtn">Sair</button>
+    </div>
   </header>
 
-  <div class="tabs" role="tablist">
-    <button data-tab="pedido" class="active">Novo Pedido</button>
-    <button data-tab="salvos">Pedidos Salvos</button>
-    <button data-tab="precos">Preços &amp; Custos</button>
-    <button data-tab="config">Configurações</button>
-  </div>
+  <nav class="tabs" id="tabs"></nav>
 
-  <section class="view active" id="view-pedido">
-    <div class="card">
-      <h2>Itens do pedido</h2>
-      <p class="desc">Lance quantos produtos quiser. Aditivo divide a raspa grossa 50/50. Base por item: m² ou peças.</p>
-      <div class="order-head">
-        <div>Produto</div><div>Cor</div><div>Esp.</div><div>Adit.</div><div>Base</div><div>Qtd</div>
-        <div class="num">m²/Peças</div><div class="num">Custo</div><div></div>
-      </div>
-      <div id="orderRows"></div>
-      <button class="add-btn" id="addRow">+ Adicionar produto</button>
-      <div class="save-bar">
-        <input id="pedidoRef" type="text" placeholder="Cliente / referência do pedido (opcional)" />
-        <button class="btn" id="savePedido">Salvar pedido</button>
-        <button class="btn ghost" id="clearPedido">Limpar</button>
-      </div>
-    </div>
-
-    <div class="two-col">
-      <div class="card">
-        <h2>Resumo de produção</h2>
-        <p class="desc">Matéria-prima a comprar por demanda para este pedido.</p>
-        <div id="matSummary"></div>
-      </div>
-      <div class="card">
-        <h2>Custo de produção</h2>
-        <p class="desc">Custo somado + composição.</p>
-        <div id="costSummary"></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="view" id="view-salvos">
-    <div class="card">
-      <h2>Pedidos salvos</h2>
-      <p class="desc">Guardados neste navegador. Carregue para reabrir no Novo Pedido ou exclua.</p>
-      <div id="savedList"></div>
-    </div>
-  </section>
-
-  <section class="view" id="view-precos">
-    <div class="card">
+  <!-- ORÇAMENTOS -->
+  <section class="view" id="view-orcamentos">
+    <div class="card" id="orcFormCard">
       <div class="card-head">
-        <div><h2>Comparativo por espessura</h2><p class="desc" style="margin-bottom:0">Venda − custo = lucro, comparado dentro de cada espessura, para o piso e a cor selecionados.</p></div>
-        <div class="filter-bar">
-          <label style="font-size:12.5px;font-weight:600;color:var(--ink-2)">Piso</label>
-          <select class="ctrl" id="filtroProduto"></select>
-          <label style="font-size:12.5px;font-weight:600;color:var(--ink-2)">Cor</label>
-          <select class="ctrl" id="filtroCor"></select>
+        <div><h2>Novo orçamento</h2><p class="desc" style="margin-bottom:0">Cadastro do cliente, itens e desconto.</p></div>
+        <button class="btn ghost sm" id="toggleForm">Ocultar</button>
+      </div>
+      <div id="orcForm">
+        <div class="cliente-grid">
+          <div class="field"><label>Nome do cliente</label><input class="ctrl" id="cliNome" type="text" placeholder="Ex.: João da Silva"></div>
+          <div class="field"><label>Telefone</label><input class="ctrl" id="cliTel" type="text" placeholder="(00) 00000-0000"></div>
+          <div class="field"><label>CNPJ / CPF</label><input class="ctrl" id="cliCnpj" type="text" placeholder="00.000.000/0000-00"></div>
+          <div class="field"><label>Endereço</label><input class="ctrl" id="cliEndereco" type="text" placeholder="Rua, número, bairro, cidade/UF"></div>
+        </div>
+        <div class="field" style="margin-bottom:18px">
+          <label>Regime fiscal do pedido</label>
+          <select class="ctrl" id="regimeSelect">
+            <option value="simples">Simples Nacional</option>
+            <option value="presumido">Lucro Presumido</option>
+            <option value="real">Lucro Real</option>
+            <option value="semNota">Sem nota</option>
+          </select>
+        </div>
+        <div class="order-head">
+          <div>Produto</div><div>Cor</div><div>Esp.</div><div>Base</div><div>Qtd</div><div style="text-align:right">Valor</div><div></div>
+        </div>
+        <div id="orcRows"></div>
+        <button class="add-btn" id="addRow">+ Adicionar item</button>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:20px" id="orcTotalsWrap">
+          <div>
+            <div class="trow desc-row"><span>Desconto</span><span><input id="descInput" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="0"> %</span></div>
+            <div id="masterExtra"></div>
+          </div>
+          <div class="totals" id="orcTotals"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+          <button class="btn" id="salvarOrc">Salvar orçamento</button>
+          <button class="btn ghost" id="limparOrc">Limpar</button>
         </div>
       </div>
-      <div class="scroll"><table class="grid" id="tblComparativo"></table></div>
     </div>
+
     <div class="card">
-      <h2 id="vendaTitle">Preço de venda por m²</h2>
-      <p class="desc" id="vendaDesc">Selecione um piso para editar os preços por cor e espessura.</p>
-      <div class="scroll"><table class="grid" id="tblVenda"></table></div>
-    </div>
-    <div class="card">
-      <h2>Custo e lucro por cor × espessura (R$/m²)</h2>
-      <p class="desc">Cada célula: custo de produção (cinza) e lucro (verde/vermelho).</p>
-      <div class="scroll"><table class="grid" id="tblCusto"></table></div>
-    </div>
-    <div class="card">
-      <h2>Matéria-prima por m²</h2>
-      <div class="scroll"><table class="grid" id="tblMaterial"></table></div>
+      <div class="card-head"><div><h2 id="orcListTitle">Orçamentos</h2></div>
+        <button class="btn ghost sm hidden" id="novoOrcBtn">+ Novo orçamento</button></div>
+      <div id="orcList"></div>
     </div>
   </section>
 
+  <!-- PEDIDOS -->
+  <section class="view" id="view-pedidos">
+    <div class="card"><div class="card-head"><div><h2>Pedidos</h2><p class="desc" style="margin-bottom:0">Orçamentos aprovados e convertidos em pedido.</p></div></div>
+      <div id="pedList"></div></div>
+  </section>
+
+  <!-- PRODUÇÃO (master) -->
+  <section class="view" id="view-producao">
+    <div class="card"><h2>Necessidade total de material</h2><p class="desc">Soma de todos os pedidos em produção — o que comprar por demanda.</p><div id="prodTotal"></div></div>
+    <div class="card"><h2>Por pedido</h2><div id="prodList"></div></div>
+  </section>
+
+  <!-- PREÇOS & CUSTOS (master) -->
+  <section class="view" id="view-precos">
+    <div class="card">
+      <div class="card-head"><div><h2>Comparativo por espessura</h2><p class="desc" style="margin-bottom:0">Venda − custo = lucro, por piso e cor.</p></div>
+        <div style="display:flex;gap:10px"><select class="ctrl" id="filtroProduto" style="max-width:220px"></select><select class="ctrl" id="filtroCor" style="max-width:160px"></select></div></div>
+      <div class="scroll"><table class="grid" id="tblComparativo"></table></div>
+    </div>
+    <div class="card"><h2>Custo e lucro por cor × espessura (R$/m²)</h2><p class="desc">Custo de produção (cinza) e lucro (verde/vermelho).</p><div class="scroll"><table class="grid" id="tblCusto"></table></div></div>
+  </section>
+
+  <!-- CONFIGURAÇÕES (master) -->
   <section class="view" id="view-config">
-    <div class="note">Campos das antigas abas <b>BASE</b> e <b>Custo ADM</b>, editáveis. Valores em R$ formatam ao digitar. Ajustes recalculam tudo na hora.</div>
+    <div class="note warn"><b>Margem de trabalho.</b> A margem alvo forma o preço de venda. Se o desconto do vendedor derrubar a margem abaixo da mínima, o orçamento fica <b>Aguardando aprovação</b> — só você libera.</div>
+    <div class="card"><div class="cfg-sec">Margens de venda</div><div class="cfg-grid" id="cfgMargens"></div></div>
+    <div class="card"><div class="cfg-sec">Usuários</div><div id="usersList"></div>
+      <div class="cfg-grid" style="margin-top:14px">
+        <div class="cfg-field"><label>Nome</label><input id="newUserNome" type="text" style="font-family:var(--ui)"></div>
+        <div class="cfg-field"><label>Usuário (login)</label><input id="newUserLogin" type="text" style="font-family:var(--ui)"></div>
+        <div class="cfg-field"><label>Senha</label><input id="newUserPass" type="text" style="font-family:var(--ui)"></div>
+        <div class="cfg-field"><label>Papel</label><select class="ctrl" id="newUserRole"><option value="vendedor">Vendedor</option><option value="master">Master</option></select></div>
+      </div>
+      <button class="btn sm" id="addUserBtn" style="margin-top:12px">Adicionar usuário</button>
+    </div>
     <div class="card"><div class="cfg-sec">Insumos — preço (R$/kg)</div><div class="cfg-grid" id="cfgInsumos"></div></div>
     <div class="card"><div class="cfg-sec">Pigmentos — preço (R$/kg)</div><div class="cfg-grid" id="cfgPigmentos"></div></div>
-    <div class="card">
-      <div class="cfg-sec">Custos fixos (Custo ADM)</div>
-      <div class="cfg-grid" id="cfgFixos"></div>
-      <div class="subhead" style="margin-top:20px">Despesas administrativas mensais</div>
-      <div class="cfg-grid" id="cfgAdm"></div>
-      <div class="cfg-grid" style="margin-top:16px">
-        <div class="cfg-field"><label>Custo fixo por m² <span class="u">(calculado)</span></label><input id="admM2out" readonly /></div>
-        <div class="cfg-field"><label>Total fixo mensal <span class="u">(calculado)</span></label><input id="admTotalout" readonly /></div>
-      </div>
-    </div>
-    <div class="card"><div class="cfg-sec">Impostos sobre a venda (%)</div><div class="cfg-grid" id="cfgTaxas"></div></div>
-    <div class="card">
-      <div class="cfg-sec">Raspa por espessura (kg/m²)</div>
-      <p class="desc">Superior (raspa fina) é fixa. Inferior alimenta raspa grossa e a base da resina.</p>
-      <div class="scroll"><table class="grid" id="cfgRaspa"></table></div>
-    </div>
-    <div class="card"><div class="cfg-sec">Produtos — peças por m²</div><div class="cfg-grid" id="cfgProdutos"></div></div>
+    <div class="card"><div class="cfg-sec">Custos fixos</div><div class="cfg-grid" id="cfgFixos"></div>
+      <div class="cfg-sec" style="margin-top:20px">Despesas administrativas mensais (R$)</div><div class="cfg-grid" id="cfgAdm"></div>
+      <div class="cfg-grid" style="margin-top:14px"><div class="cfg-field"><label>Custo fixo por m² <span class="u">(calculado)</span></label><input id="admM2out" readonly></div></div></div>
+    <div class="card"><div class="cfg-sec">Impostos sobre a venda (%)</div><div class="cfg-grid" id="cfgTaxas"></div>
+      <p class="note" style="margin-top:10px">Comissão e desconto padrão acima incidem sobre toda venda. O imposto varia por regime fiscal — configure cada um abaixo; o vendedor escolhe o regime ao montar o orçamento.</p></div>
+    <div class="card"><div class="cfg-sec">Regime fiscal — imposto sobre a venda (%)</div><div class="cfg-grid" id="cfgRegimes"></div>
+      <p class="note warn" style="margin-top:10px">Valores de referência — ajuste conforme a apuração real da contabilidade (faixa do Simples, alíquotas presumidas de IRPJ/CSLL/PIS/COFINS/ICMS, etc.).</p></div>
+    <div class="card"><div class="cfg-sec">Raspa por espessura (kg/m²)</div><div class="scroll"><table class="grid" id="cfgRaspa"></table></div></div>
   </section>
 </div>
 
 <script>
-/* ================================================================ CONFIG ================================================================ */
-const CONFIG = {
-  insumos: { raspaFina:2.2, raspaGrossa:2.2, aditivo:2.2, resina:23.6 },
-  resinaRatio: { superior:0.06, inferior:0.05 },
-  superiorKg: 4.5,
-  pigmentos: { preto:25.1, verde:36.5, terracota:24.5, amarelo:44.67, branco:36.5, azul:38, cinza:32.4, laranja:38.9 },
-  raspaPorEspessura: {
-    15:{grossa:8.5, resina:9.0}, 20:{grossa:13.5,resina:13.5}, 25:{grossa:18,resina:18},
-    30:{grossa:22.5,resina:22.5}, 40:{grossa:23.7,resina:23.7}, 50:{grossa:32.5,resina:32.5}, 60:{grossa:41.3,resina:41.3},
-  },
-  espessuras: [15,20,25,30,40,50,60],
-  cores: {
-    preto:    { label:"Preto",     sw:"#2B2B2B", receita:[] },
-    verde:    { label:"Verde",     sw:"#2E8B43", receita:[["verde",0.06]] },
-    terracota:{ label:"Terracota", sw:"#B5533B", receita:[["terracota",0.06]] },
-    amarelo:  { label:"Amarelo",   sw:"#E8B23A", receita:[["branco",0.03],["amarelo",0.08]] },
-    azul:     { label:"Azul",      sw:"#2D6CB5", receita:[["azul",0.06]] },
-    cinza:    { label:"Cinza",     sw:"#7A8288", receita:[["cinza",0.06]] },
-    laranja:  { label:"Laranja",   sw:"#E07B2E", receita:[["branco",0.03],["laranja",0.08]] },
-  },
-  fixos: { maoObraM2:3.54, custoIndireto:96850, maquinas:8, m2PorMaquinaHora:10, horasMes:374 },
-  adm: {
-    "Energia elétrica":25665.15, "Aluguel imóvel":10000, "IPTU":2279.28, "Telefone móvel":3554.8,
-    "Telefone fixo":720.72, "Segurança galpão":7000, "Google empresa":2000, "Google crédito":4000,
-    "Sistema Tiny":300, "Sistema TOTVS":1000, "Provedor":215.93, "Advogado":3000,
-    "Contabilidade":6000, "Água":755.97,
-  },
-  taxas: { imposto:0.15, comissao:0.05, desconto:0.05 },
-  produtos: [
-    { id:"ossinho", nome:"Ossinho", pecasM2:37 },
-    { id:"lisa",    nome:"Placa Lisa", pecasM2:1 },
-    { id:"wave",    nome:"Wave", pecasM2:21 },
-    { id:"tijolo",  nome:"Placa Ossinho de Tijolo", pecasM2:1 },
-    { id:"romano",  nome:"Romano", pecasM2:18 },
-    { id:"mosaico", nome:"Placa / Laje / Pedra Mosaico", pecasM2:4 },
-    { id:"street",  nome:"Street Plus", pecasM2:32 },
-    { id:"rampa",   nome:"Rampa", pecasM2:2 },
-  ],
-  // preço de venda (R$/m²) por produto × cor × espessura — carregado da planilha real
-  precoVenda: {
-    ossinho:{
-      preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7}, verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},
-      terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5}, amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},
-      azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9}, cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},
-      laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8} },
-    lisa:{
-      preto:{15:74.75,20:90.85,25:108.68,30:147.2,40:155.3,50:163.3}, verde:{15:91.3,20:106.7,25:123.2,30:148.5,40:157.3,50:179.3},
-      terracota:{15:86.9,20:102.85,25:121,30:143,40:154,50:173.8}, amarelo:{15:100.1,20:115.5,25:132,30:171.6,40:188.98,50:207.9},
-      azul:{15:84.7,20:99,25:115.5,30:144.65,40:154,50:170.5}, cinza:{15:89.1,20:103.95,25:120.45,30:147.4,40:155.1,50:179.3},
-      laranja:{15:110.1,20:125.5,25:142,30:181.6,40:198.98,50:217.9} },
-    wave:{
-      preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7}, verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},
-      terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5}, amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},
-      azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9}, cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},
-      laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8} },
-    tijolo:{},
-    romano:{
-      preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7}, verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},
-      terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5}, amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},
-      azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9}, cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},
-      laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8} },
-    mosaico:{
-      preto:{15:72.45,20:90.85,25:108.68,30:147.2,40:155.3,50:163.3}, verde:{15:91.3,20:106.7,25:123.2,30:148.5,40:157.3,50:179.3},
-      terracota:{15:86.9,20:102.85,25:121,30:143,40:154,50:173.8}, amarelo:{15:100.1,20:115.5,25:132,30:172.15,40:195.8,50:207.9},
-      azul:{15:84.7,20:99,25:115.5,30:144.65,40:154,50:176}, cinza:{15:89.1,20:103.95,25:120.45,30:147.4,40:155.1,50:176},
-      laranja:{15:110.1,20:125.5,25:142,30:182.15,40:205.8,50:217.9} },
-    street:{
-      preto:{30:167.2,40:183.7,50:214.5}, verde:{30:177.1,40:194.7,50:214.17}, terracota:{30:173.8,40:190.3,50:209},
-      amarelo:{30:196.9,40:216.59,50:236.5}, azul:{30:170.5,40:187.55,50:205.7}, cinza:{30:177.1,40:194.7,50:214.17},
-      laranja:{30:206.9,40:226.59,50:246.5} },
-    rampa:{},
-  },
+/* ================================================================ ARMAZENAMENTO ================================================================ */
+const mem={};
+const DB={
+  read(k,def){ try{ const v=localStorage.getItem("kf_"+k); return v?JSON.parse(v):def; }catch(e){ return (k in mem)?mem[k]:def; } },
+  write(k,v){ try{ localStorage.setItem("kf_"+k, JSON.stringify(v)); }catch(e){ mem[k]=v; } }
 };
 
-/* ================================================================ MOTOR ================================================================ */
-function custoAdmM2(){
-  const somaAdm = Object.values(CONFIG.adm).reduce((s,v)=>s+(+v||0),0);
-  const totalMensal = somaAdm + (+CONFIG.fixos.custoIndireto||0);
-  const m2Mes = CONFIG.fixos.maquinas * CONFIG.fixos.m2PorMaquinaHora * CONFIG.fixos.horasMes;
-  return { totalMensal, porM2: m2Mes>0 ? totalMensal/m2Mes : 0 };
-}
-function pigmentoKgPorM2(cor){ const out={}; (CONFIG.cores[cor]?.receita||[]).forEach(([p,r])=>{ out[p]=(out[p]||0)+CONFIG.superiorKg*r; }); return out; }
-function custoPigmentoM2(cor){ return Object.entries(pigmentoKgPorM2(cor)).reduce((s,[p,k])=>s+k*(CONFIG.pigmentos[p]||0),0); }
-function materialPorM2(cor, esp, aditivo){
-  const inf = CONFIG.raspaPorEspessura[esp] || {grossa:0,resina:0};
-  const gCheia = inf.grossa;
-  const raspaGrossa = aditivo ? gCheia/2 : gCheia;
-  const aditKg      = aditivo ? gCheia/2 : 0;
-  const resina = CONFIG.superiorKg*CONFIG.resinaRatio.superior + inf.resina*CONFIG.resinaRatio.inferior;
-  return { raspaFina:CONFIG.superiorKg, raspaGrossa, aditivo:aditKg, resina, pigmentos:pigmentoKgPorM2(cor) };
-}
-function custoProducaoM2(cor, esp, aditivo){
-  const m = materialPorM2(cor, esp, aditivo);
-  const rf=m.raspaFina*CONFIG.insumos.raspaFina, rg=m.raspaGrossa*CONFIG.insumos.raspaGrossa,
-        ad=m.aditivo*CONFIG.insumos.aditivo, rs=m.resina*CONFIG.insumos.resina,
-        pig=custoPigmentoM2(cor), mo=CONFIG.fixos.maoObraM2, fixo=custoAdmM2().porM2;
-  return { total:rf+rg+ad+rs+pig+mo+fixo, comp:{ raspa:rf+rg+ad, resina:rs, pigmento:pig, maoObra:mo, fixo } };
-}
-function taxaVenda(){ const t=CONFIG.taxas; return t.imposto+t.comissao+t.desconto; }
-function lucroM2(cor, esp, venda){
-  const custoProd = custoProducaoM2(cor, esp, false).total;
-  const custoTotal = custoProd + venda*taxaVenda();
-  const lucro = venda>0 ? venda - custoTotal : null;
-  return { custoProd, custoTotal, lucro, margem:(venda>0 && custoTotal>0)? lucro/custoTotal*100 : null };
-}
+/* ================================================================ CONFIG (padrão, sobrescrito pelo que o Master salvar) ================================================================ */
+const DEFAULT_CONFIG = {
+  insumos:{ raspaFina:2.2, raspaGrossa:2.2, aditivo:2.2, resina:23.6 },
+  resinaRatio:{ superior:0.06, inferior:0.05 }, superiorKg:4.5,
+  pigmentos:{ preto:25.1, verde:36.5, terracota:24.5, amarelo:44.67, branco:36.5, azul:38, cinza:32.4, laranja:38.9 },
+  raspaPorEspessura:{ 15:{grossa:8.5,resina:9.0},20:{grossa:13.5,resina:13.5},25:{grossa:18,resina:18},30:{grossa:22.5,resina:22.5},40:{grossa:23.7,resina:23.7},50:{grossa:32.5,resina:32.5},60:{grossa:41.3,resina:41.3} },
+  espessuras:[15,20,25,30,40,50,60],
+  cores:{ preto:{label:"Preto",sw:"#2B2B2B",receita:[]}, verde:{label:"Verde",sw:"#2E8B43",receita:[["verde",0.06]]}, terracota:{label:"Terracota",sw:"#B5533B",receita:[["terracota",0.06]]}, amarelo:{label:"Amarelo",sw:"#E8B23A",receita:[["branco",0.03],["amarelo",0.08]]}, azul:{label:"Azul",sw:"#2D6CB5",receita:[["azul",0.06]]}, cinza:{label:"Cinza",sw:"#7A8288",receita:[["cinza",0.06]]}, laranja:{label:"Laranja",sw:"#E07B2E",receita:[["branco",0.03],["laranja",0.08]]} },
+  fixos:{ maoObraM2:3.54, custoIndireto:96850, maquinas:8, m2PorMaquinaHora:10, horasMes:374 },
+  adm:{ "Energia elétrica":25665.15,"Aluguel imóvel":10000,"IPTU":2279.28,"Telefone móvel":3554.8,"Telefone fixo":720.72,"Segurança galpão":7000,"Google empresa":2000,"Google crédito":4000,"Sistema Tiny":300,"Sistema TOTVS":1000,"Provedor":215.93,"Advogado":3000,"Contabilidade":6000,"Água":755.97 },
+  taxas:{ imposto:0.15, comissao:0.05, desconto:0.05 },
+  regimes:{ semNota:0, simples:0.06, presumido:0.1133, real:0.1233 },
+  produtos:[ {id:"ossinho",nome:"Ossinho",pecasM2:37},{id:"lisa",nome:"Placa Lisa",pecasM2:1},{id:"wave",nome:"Wave",pecasM2:21},{id:"tijolo",nome:"Placa Ossinho de Tijolo",pecasM2:1},{id:"romano",nome:"Romano",pecasM2:18},{id:"mosaico",nome:"Placa / Laje / Pedra Mosaico",pecasM2:4},{id:"street",nome:"Street Plus",pecasM2:32},{id:"rampa",nome:"Rampa",pecasM2:2} ],
+  precoVenda:{
+    ossinho:{preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7},verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5},amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9},cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8}},
+    lisa:{preto:{15:74.75,20:90.85,25:108.68,30:147.2,40:155.3,50:163.3},verde:{15:91.3,20:106.7,25:123.2,30:148.5,40:157.3,50:179.3},terracota:{15:86.9,20:102.85,25:121,30:143,40:154,50:173.8},amarelo:{15:100.1,20:115.5,25:132,30:171.6,40:188.98,50:207.9},azul:{15:84.7,20:99,25:115.5,30:144.65,40:154,50:170.5},cinza:{15:89.1,20:103.95,25:120.45,30:147.4,40:155.1,50:179.3},laranja:{15:110.1,20:125.5,25:142,30:181.6,40:198.98,50:217.9}},
+    wave:{preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7},verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5},amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9},cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8}},
+    tijolo:{}, romano:{preto:{15:86.9,20:98.45,25:118.25,30:140.8,40:159.5,50:183.7},verde:{15:101.2,20:114.95,25:138.6,30:149.6,40:173.8,50:196.9},terracota:{15:96.8,20:111.1,25:134.2,30:146.3,40:168.3,50:192.5},amarelo:{15:109.45,20:129.25,25:149.05,30:161.15,40:182.15,50:206.8},azul:{15:94.6,20:108.35,25:132,30:143.55,40:173.8,50:196.9},cinza:{15:99.55,20:112.75,25:136.4,30:147.4,40:171.6,50:195.8},laranja:{15:119.45,20:139.25,25:159.05,30:171.15,40:192.6,50:216.8}},
+    mosaico:{preto:{15:72.45,20:90.85,25:108.68,30:147.2,40:155.3,50:163.3},verde:{15:91.3,20:106.7,25:123.2,30:148.5,40:157.3,50:179.3},terracota:{15:86.9,20:102.85,25:121,30:143,40:154,50:173.8},amarelo:{15:100.1,20:115.5,25:132,30:172.15,40:195.8,50:207.9},azul:{15:84.7,20:99,25:115.5,30:144.65,40:154,50:176},cinza:{15:89.1,20:103.95,25:120.45,30:147.4,40:155.1,50:176},laranja:{15:110.1,20:125.5,25:142,30:182.15,40:205.8,50:217.9}},
+    street:{preto:{30:167.2,40:183.7,50:214.5},verde:{30:177.1,40:194.7,50:214.17},terracota:{30:173.8,40:190.3,50:209},amarelo:{30:196.9,40:216.59,50:236.5},azul:{30:170.5,40:187.55,50:205.7},cinza:{30:177.1,40:194.7,50:214.17},laranja:{30:206.9,40:226.59,50:246.5}}, rampa:{}
+  },
+  margemAlvo:50, margemMinima:35,
+};
+let CONFIG = mergeConfig(DEFAULT_CONFIG, DB.read("config",{}));
+function mergeConfig(base, saved){ const c=JSON.parse(JSON.stringify(base)); for(const k in saved){ if(saved[k]&&typeof saved[k]==="object"&&!Array.isArray(saved[k])) c[k]=Object.assign(c[k]||{},saved[k]); else c[k]=saved[k]; } return c; }
+function saveConfig(){ DB.write("config", CONFIG); }
+
+/* ================================================================ MOTOR DE CUSTO ================================================================ */
+function custoAdmM2(){ const s=Object.values(CONFIG.adm).reduce((a,v)=>a+(+v||0),0)+(+CONFIG.fixos.custoIndireto||0); const cap=CONFIG.fixos.maquinas*CONFIG.fixos.m2PorMaquinaHora*CONFIG.fixos.horasMes; return cap>0?s/cap:0; }
+function pigKg(cor){ const o={}; (CONFIG.cores[cor]?.receita||[]).forEach(([p,r])=>o[p]=(o[p]||0)+CONFIG.superiorKg*r); return o; }
+function custoPigM2(cor){ return Object.entries(pigKg(cor)).reduce((s,[p,k])=>s+k*(CONFIG.pigmentos[p]||0),0); }
+function materialM2(cor,esp,adit){ const inf=CONFIG.raspaPorEspessura[esp]||{grossa:0,resina:0}; const g=inf.grossa; return { raspaFina:CONFIG.superiorKg, raspaGrossa:adit?g/2:g, aditivo:adit?g/2:0, resina:CONFIG.superiorKg*CONFIG.resinaRatio.superior+inf.resina*CONFIG.resinaRatio.inferior, pigmentos:pigKg(cor) }; }
+function custoProdM2(cor,esp,adit){ const m=materialM2(cor,esp,adit); return m.raspaFina*CONFIG.insumos.raspaFina+m.raspaGrossa*CONFIG.insumos.raspaGrossa+m.aditivo*CONFIG.insumos.aditivo+m.resina*CONFIG.insumos.resina+custoPigM2(cor)+CONFIG.fixos.maoObraM2+custoAdmM2(); }
+function taxaVenda(regime){ const t=CONFIG.taxas; const imp=(regime!=null&&CONFIG.regimes[regime]!=null)?CONFIG.regimes[regime]:t.imposto; return imp+t.comissao+t.desconto; }
+const REGIME_LABELS={ semNota:"Sem nota", simples:"Simples Nacional", presumido:"Lucro Presumido", real:"Lucro Real" };
 
 /* ================================================================ FORMATAÇÃO ================================================================ */
-const nf = (v,d=2)=> (v==null||isNaN(v))?"—":new Intl.NumberFormat("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:d}).format(v);
-const money = (v,d=2)=> "R$ "+new Intl.NumberFormat("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d}).format(v||0);
-const centsToBR = c => "R$ "+new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format((c||0)/100);
-const pigLabel = p => ({preto:"Preto",verde:"Verde",terracota:"Terracota",amarelo:"Amarelo",branco:"Branco",azul:"Azul",cinza:"Cinza",laranja:"Laranja"}[p]||p);
-const pigSw = p => (CONFIG.cores[p]?.sw)||({branco:"#E3DFD3"}[p])||"var(--pig)";
+const nf=(v,d=2)=>(v==null||isNaN(v))?"—":new Intl.NumberFormat("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:d}).format(v);
+const money=(v,d=2)=>"R$ "+new Intl.NumberFormat("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d}).format(v||0);
+const pigLabel=p=>({preto:"Preto",verde:"Verde",terracota:"Terracota",amarelo:"Amarelo",branco:"Branco",azul:"Azul",cinza:"Cinza",laranja:"Laranja"}[p]||p);
+const pigSw=p=>(CONFIG.cores[p]?.sw)||({branco:"#E3DFD3"}[p])||"var(--pig)";
+const corLabel=c=>CONFIG.cores[c]?.label||c;
+const prodNome=id=>CONFIG.produtos.find(p=>p.id===id)?.nome||id;
+function itemM2Pecas(it){ const prod=CONFIG.produtos.find(p=>p.id===it.produto)||CONFIG.produtos[0]; let m2=0,pc=0; if(it.qtd>0){ if(it.base==="m2"){m2=it.qtd;pc=Math.floor(it.qtd*prod.pecasM2);} else {pc=it.qtd;m2=prod.pecasM2>0?it.qtd/prod.pecasM2:0;} } return {m2,pc,prod}; }
 
-/* ================================================================ PEDIDO ================================================================ */
-let pedido = [ novoItem() ];
-function novoItem(){ return { produto:"ossinho", cor:"preto", esp:15, aditivo:false, base:"m2", qtd:null }; }
-function itemM2Pecas(it){
-  const prod=CONFIG.produtos.find(p=>p.id===it.produto)||CONFIG.produtos[0];
-  let m2=0,pc=0;
-  if(it.qtd>0){ if(it.base==="m2"){ m2=it.qtd; pc=Math.floor(it.qtd*prod.pecasM2); } else { pc=it.qtd; m2=prod.pecasM2>0?it.qtd/prod.pecasM2:0; } }
-  return {m2,pc,prod};
+/* ================================================================ PRECIFICAÇÃO / ORÇAMENTO ================================================================ */
+function precoVendaItem(it){ const {m2}=itemM2Pecas(it); const custo=custoProdM2(it.cor,+it.esp,it.aditivo)*m2; const venda=custo*(1+CONFIG.margemAlvo/100); return {m2,custo,venda}; }
+function calcOrcamento(itens, descontoPct, regime){
+  let custo=0, vendaCheia=0;
+  itens.forEach(it=>{ if(!(it.qtd>0))return; const p=precoVendaItem(it); custo+=p.custo; vendaCheia+=p.venda; });
+  const desc=+descontoPct||0;
+  const vendaFinal=vendaCheia*(1-desc/100);
+  const margem=custo>0?(vendaFinal-custo)/custo*100:0;
+  const impostos=vendaFinal*taxaVenda(regime);
+  const status=margem>=CONFIG.margemMinima?"aprovado":"aguardando";
+  return {custo, vendaCheia, vendaFinal, desconto:desc, regime:regime||"simples", margem, impostos, status};
 }
-function optProdutos(sel){ return CONFIG.produtos.map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${p.nome}</option>`).join(""); }
-function optCores(sel){ return Object.entries(CONFIG.cores).map(([k,c])=>`<option value="${k}" ${k===sel?"selected":""}>${c.label}</option>`).join(""); }
-function optEsp(sel){ return CONFIG.espessuras.map(e=>`<option value="${e}" ${e==sel?"selected":""}>${e} mm</option>`).join(""); }
 
-function renderRows(){
-  const box=document.getElementById("orderRows"); box.innerHTML="";
-  pedido.forEach((it,i)=>{
-    const {m2,pc}=itemM2Pecas(it);
-    const cM2=custoProducaoM2(it.cor,+it.esp,it.aditivo).total;
-    const saida = it.qtd>0 ? (it.base==="m2"? nf(pc)+" pç" : nf(m2,2)+" m²") : "—";
+/* ================================================================ SESSÃO / USUÁRIOS ================================================================ */
+function seedUsers(){ let u=DB.read("users",null); if(!u||!u.length){ u=[ {id:1,nome:"Administrador",login:"master",senha:"master",papel:"master"}, {id:2,nome:"Vendedor 1",login:"vendedor",senha:"vendedor",papel:"vendedor"} ]; DB.write("users",u);} return u; }
+let USERS=seedUsers();
+let SESSION=null;
+
+const $=id=>document.getElementById(id);
+document.getElementById("loginHint").innerHTML="Protótipo — acessos de teste:<br><b>master / master</b> · <b>vendedor / vendedor</b>";
+
+$("togglePass").addEventListener("click",()=>{
+  const inp=$("loginPass");
+  const show=inp.type==="password";
+  inp.type=show?"text":"password";
+  $("togglePass").textContent=show?"OCULTAR":"MOSTRAR";
+});
+
+$("loginForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  USERS=DB.read("users",USERS);
+  const u=$("loginUser").value.trim(), p=$("loginPass").value.trim();
+  const found=USERS.find(x=>x.login.trim().toLowerCase()===u.toLowerCase()&&x.senha.trim().toLowerCase()===p.toLowerCase());
+  if(!found){ $("loginErr").textContent="Usuário ou senha inválidos."; return; }
+  SESSION=found; DB.write("session",{id:found.id}); startApp();
+});
+$("logoutBtn").addEventListener("click",()=>{ SESSION=null; DB.write("session",null); $("app").classList.add("hidden"); $("loginScreen").classList.remove("hidden"); $("loginUser").value=""; $("loginPass").value=""; $("loginErr").textContent=""; });
+
+function isMaster(){ return SESSION?.papel==="master"; }
+
+/* ================================================================ NAVEGAÇÃO ================================================================ */
+const TABS_MASTER=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["producao","Produção"],["precos","Preços & Custos"],["config","Configurações"]];
+const TABS_VEND=[["orcamentos","Orçamentos"],["pedidos","Pedidos"]];
+function buildTabs(){
+  const tabs=isMaster()?TABS_MASTER:TABS_VEND;
+  $("tabs").innerHTML=tabs.map((t,i)=>`<button data-tab="${t[0]}" class="${i===0?"active":""}">${t[1]}</button>`).join("");
+  $("tabs").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.tab)));
+}
+function showTab(tab){
+  $("tabs").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+tab));
+  if(tab==="orcamentos") renderOrcList();
+  if(tab==="pedidos") renderPedidos();
+  if(tab==="producao") renderProducao();
+  if(tab==="precos") renderPrecos();
+  if(tab==="config") renderConfig();
+}
+
+function startApp(){
+  $("loginScreen").classList.add("hidden"); $("app").classList.remove("hidden");
+  $("whoName").textContent=SESSION.nome;
+  $("whoRole").textContent=SESSION.papel; $("whoRole").className="r "+SESSION.papel;
+  buildTabs();
+  resetOrcForm(); renderOrcList();
+  showTab("orcamentos");
+}
+
+/* ================================================================ ORÇAMENTO — FORMULÁRIO ================================================================ */
+let orcItens=[novoItem()], editandoId=null;
+function novoItem(){ return {produto:"ossinho",cor:"preto",esp:15,aditivo:false,base:"m2",qtd:null}; }
+function optP(s){ return CONFIG.produtos.map(p=>`<option value="${p.id}" ${p.id===s?"selected":""}>${p.nome}</option>`).join(""); }
+function optC(s){ return Object.entries(CONFIG.cores).map(([k,c])=>`<option value="${k}" ${k===s?"selected":""}>${c.label}</option>`).join(""); }
+function optE(s){ return CONFIG.espessuras.map(e=>`<option value="${e}" ${e==s?"selected":""}>${e} mm</option>`).join(""); }
+
+function renderOrcRows(){
+  const box=$("orcRows"); box.innerHTML="";
+  orcItens.forEach((it,i)=>{
+    const {m2,pc}=itemM2Pecas(it); const p=precoVendaItem(it);
+    const saida = it.qtd>0 ? money(p.venda) : "—";
     const row=document.createElement("div"); row.className="order-row";
     row.innerHTML=`
-      <div class="cell" data-l="Produto"><select class="ctrl" data-i="${i}" data-k="produto">${optProdutos(it.produto)}</select></div>
-      <div class="cell" data-l="Cor"><select class="ctrl" data-i="${i}" data-k="cor">${optCores(it.cor)}</select></div>
-      <div class="cell" data-l="Espessura"><select class="ctrl" data-i="${i}" data-k="esp">${optEsp(it.esp)}</select></div>
-      <div class="cell adit-box"><input type="checkbox" data-i="${i}" data-k="aditivo" ${it.aditivo?"checked":""} aria-label="Aditivo"></div>
-      <div class="cell" data-l="Base"><select class="ctrl" data-i="${i}" data-k="base">
-        <option value="m2" ${it.base==="m2"?"selected":""}>m²</option><option value="pc" ${it.base==="pc"?"selected":""}>Peças</option></select></div>
+      <div class="cell" data-l="Produto"><select class="ctrl" data-i="${i}" data-k="produto">${optP(it.produto)}</select></div>
+      <div class="cell" data-l="Cor"><select class="ctrl" data-i="${i}" data-k="cor">${optC(it.cor)}</select></div>
+      <div class="cell" data-l="Espessura"><select class="ctrl" data-i="${i}" data-k="esp">${optE(it.esp)}</select></div>
+      <div class="cell" data-l="Base"><select class="ctrl" data-i="${i}" data-k="base"><option value="m2" ${it.base==="m2"?"selected":""}>m²</option><option value="pc" ${it.base==="pc"?"selected":""}>Peças</option></select></div>
       <div class="cell" data-l="Qtd"><input class="ctrl" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${it.qtd??""}" data-i="${i}" data-k="qtd"></div>
-      <div class="cell out" data-l="Resultado">${saida}</div>
-      <div class="cell out cost" data-l="Custo">${it.qtd>0?money(cM2*m2):"—"}</div>
-      <div class="del-wrap"><button class="del" data-del="${i}" aria-label="Remover" title="Remover">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
+      <div class="cell out venda" data-l="Valor">${saida}</div>
+      <div class="del-wrap"><button class="del" data-del="${i}" title="Remover"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
     box.appendChild(row);
   });
+  renderOrcTotals();
 }
-function renderMatSummary(){
-  const box=document.getElementById("matSummary");
-  let rf=0,rg=0,ad=0,res=0; const pig={}; let totM2=0,totPc=0;
-  pedido.forEach(it=>{ if(!(it.qtd>0))return; const {m2,pc}=itemM2Pecas(it); totM2+=m2; totPc+=pc;
-    const m=materialPorM2(it.cor,+it.esp,it.aditivo);
-    rf+=m.raspaFina*m2; rg+=m.raspaGrossa*m2; ad+=m.aditivo*m2; res+=m.resina*m2;
-    Object.entries(m.pigmentos).forEach(([p,k])=>pig[p]=(pig[p]||0)+k*m2);
-  });
-  if(totM2<=0){ box.innerHTML=`<div class="empty">Adicione itens com quantidade para ver a matéria-prima.</div>`; return; }
-  let html=`<div class="mat-list">
-    <div class="mat-item"><span class="dot" style="background:var(--raspa-f)"></span><span class="nm">Raspa fina</span><span class="kg">${nf(rf,1)}<span class="u">kg</span></span></div>
-    <div class="mat-item"><span class="dot" style="background:var(--raspa-g)"></span><span class="nm">Raspa grossa</span><span class="kg">${nf(rg,1)}<span class="u">kg</span></span></div>`;
-  if(ad>0) html+=`<div class="mat-item"><span class="dot" style="background:var(--aditivo)"></span><span class="nm">Aditivo</span><span class="kg">${nf(ad,1)}<span class="u">kg</span></span></div>`;
-  html+=`<div class="mat-item"><span class="dot" style="background:var(--resina)"></span><span class="nm">Resina</span><span class="kg">${nf(res,2)}<span class="u">kg</span></span></div></div>`;
-  const pe=Object.entries(pig).filter(([,k])=>k>0);
-  if(pe.length){ html+=`<div class="subhead">Pigmentos</div><div class="mat-list">`;
-    pe.forEach(([p,k])=>{ html+=`<div class="mat-item"><span class="dot" style="background:${pigSw(p)}"></span><span class="nm">${pigLabel(p)}</span><span class="kg">${nf(k,2)}<span class="u">kg</span></span></div>`; });
-    html+=`</div>`; }
-  html+=`<div class="subhead">Totais</div><div class="totals">
-    <div class="trow"><span>Metragem total</span><span class="v">${nf(totM2,2)} m²</span></div>
-    <div class="trow"><span>Peças totais</span><span class="v">${nf(totPc)} pç</span></div></div>`;
-  box.innerHTML=html;
+function renderOrcTotals(){
+  const desc=parseFloat(($("descInput").value||"").replace(",","."))||0;
+  const regime=$("regimeSelect").value;
+  const r=calcOrcamento(orcItens,desc,regime);
+  let html=`<div class="trow"><span>Valor dos itens</span><span class="v">${money(r.vendaCheia)}</span></div>`;
+  if(r.desconto>0) html+=`<div class="trow"><span>Desconto (${nf(r.desconto,1)}%)</span><span class="v" style="color:var(--neg)">− ${money(r.vendaCheia-r.vendaFinal)}</span></div>`;
+  html+=`<div class="trow"><span>Impostos, comissão e desconto <small style="color:var(--ink-2)">(${REGIME_LABELS[regime]})</small></span><span class="v">${money(r.impostos)}</span></div>`;
+  html+=`<div class="trow big"><span>Total da venda</span><span class="v">${money(r.vendaFinal)}</span></div>`;
+  $("orcTotals").innerHTML=html;
+  if(isMaster()){
+    $("masterExtra").innerHTML=`<div class="totals" style="margin-top:14px">
+      <div class="trow"><span>Custo de produção</span><span class="v">${money(r.custo)}</span></div>
+      <div class="trow"><span>Margem resultante</span><span class="v" style="color:${r.margem>=CONFIG.margemMinima?'var(--pos)':'var(--neg)'}">${nf(r.margem,1)}%</span></div>
+      <div class="trow"><span>Margem mínima</span><span class="v">${nf(CONFIG.margemMinima,1)}%</span></div></div>`;
+  } else $("masterExtra").innerHTML="";
 }
-function renderCostSummary(){
-  const box=document.getElementById("costSummary");
-  let total=0; const comp={raspa:0,resina:0,pigmento:0,maoObra:0,fixo:0};
-  pedido.forEach(it=>{ if(!(it.qtd>0))return; const {m2}=itemM2Pecas(it);
-    const c=custoProducaoM2(it.cor,+it.esp,it.aditivo); total+=c.total*m2; for(const k in comp) comp[k]+=c.comp[k]*m2; });
-  if(total<=0){ box.innerHTML=`<div class="empty">Sem custo ainda.</div>`; return; }
-  const segs=[["Raspa/Aditivo",comp.raspa,"var(--raspa-g)"],["Resina",comp.resina,"var(--resina)"],["Pigmento",comp.pigmento,"var(--pig)"],["Mão de obra",comp.maoObra,"var(--brand)"],["Custo fixo",comp.fixo,"#B9C4B4"]];
-  let bar=`<div class="bar">`; segs.forEach(([,v,c])=>{ if(v>0) bar+=`<span style="width:${(v/total*100).toFixed(2)}%;background:${c}"></span>`; });
-  bar+=`</div><div class="bar-leg">`; segs.forEach(([n,v,c])=>{ if(v>0) bar+=`<span><i style="background:${c}"></i>${n} ${money(v)}</span>`; }); bar+=`</div>`;
-  box.innerHTML=`<div class="grand totals"><span class="lbl">Custo total de produção</span><div class="v" style="margin-top:4px">${money(total)}</div></div>${bar}`;
-}
-function renderPedido(){ renderRows(); renderMatSummary(); renderCostSummary(); }
+$("orcRows").addEventListener("input",e=>{ const t=e.target; if(t.dataset.i===undefined)return; const i=+t.dataset.i,k=t.dataset.k;
+  if(k==="qtd"){ const v=parseFloat(t.value.replace(",",".")); orcItens[i].qtd=isNaN(v)?null:v; const p=precoVendaItem(orcItens[i]); t.closest(".order-row").querySelector(".venda").textContent=orcItens[i].qtd>0?money(p.venda):"—"; renderOrcTotals(); return; }
+  if(k==="esp") orcItens[i].esp=+t.value; else orcItens[i][k]=t.value; renderOrcRows();
+});
+$("orcRows").addEventListener("click",e=>{ const b=e.target.closest("[data-del]"); if(!b)return; orcItens.splice(+b.dataset.del,1); if(!orcItens.length)orcItens=[novoItem()]; renderOrcRows(); });
+$("addRow").addEventListener("click",()=>{ orcItens.push(novoItem()); renderOrcRows(); });
+$("descInput").addEventListener("input",renderOrcTotals);
+$("regimeSelect").addEventListener("change",renderOrcTotals);
+$("limparOrc").addEventListener("click",resetOrcForm);
+$("toggleForm").addEventListener("click",()=>{ const f=$("orcForm"); const h=f.classList.toggle("hidden"); $("toggleForm").textContent=h?"Mostrar":"Ocultar"; });
+$("novoOrcBtn").addEventListener("click",()=>{ resetOrcForm(); $("orcForm").classList.remove("hidden"); $("toggleForm").textContent="Ocultar"; window.scrollTo({top:0,behavior:"smooth"}); });
 
-document.getElementById("orderRows").addEventListener("input", e=>{
-  const t=e.target; if(t.dataset.i===undefined) return;
-  const i=+t.dataset.i,k=t.dataset.k;
-  if(k==="qtd"){ const v=parseFloat(t.value.replace(",",".")); pedido[i].qtd=isNaN(v)?null:v;
-    const {m2,pc}=itemM2Pecas(pedido[i]); const cM2=custoProducaoM2(pedido[i].cor,+pedido[i].esp,pedido[i].aditivo).total;
-    const row=t.closest(".order-row"); row.querySelector(".out:not(.cost)").textContent=pedido[i].qtd>0?(pedido[i].base==="m2"?nf(pc)+" pç":nf(m2,2)+" m²"):"—";
-    row.querySelector(".cost").textContent=pedido[i].qtd>0?money(cM2*m2):"—";
-    renderMatSummary(); renderCostSummary(); return; }
-  if(k==="aditivo"){ pedido[i].aditivo=t.checked; }
-  else if(k==="esp"){ pedido[i].esp=+t.value; }
-  else pedido[i][k]=t.value;
-  renderPedido();
-});
-document.getElementById("orderRows").addEventListener("click", e=>{
-  const b=e.target.closest("[data-del]"); if(!b) return;
-  pedido.splice(+b.dataset.del,1); if(!pedido.length) pedido=[novoItem()]; renderPedido();
-});
-document.getElementById("addRow").addEventListener("click",()=>{ pedido.push(novoItem()); renderPedido(); });
-document.getElementById("clearPedido").addEventListener("click",()=>{ pedido=[novoItem()]; document.getElementById("pedidoRef").value=""; renderPedido(); });
+function resetOrcForm(){ orcItens=[novoItem()]; editandoId=null; $("cliNome").value=""; $("cliTel").value=""; $("cliCnpj").value=""; $("cliEndereco").value=""; $("regimeSelect").value="simples"; $("descInput").value=""; $("salvarOrc").textContent="Salvar orçamento"; renderOrcRows(); }
 
-/* ================================================================ PEDIDOS SALVOS ================================================================ */
-let memPedidos=null;
-const store={
-  get(){ try{ return JSON.parse(localStorage.getItem("kasfloor_pedidos")||"[]"); }catch(e){ return memPedidos||(memPedidos=[]); } },
-  set(a){ try{ localStorage.setItem("kasfloor_pedidos", JSON.stringify(a)); }catch(e){ memPedidos=a; } }
-};
-document.getElementById("savePedido").addEventListener("click",()=>{
-  const itens=pedido.filter(it=>it.qtd>0);
-  if(!itens.length){ alert("Adicione ao menos um item com quantidade antes de salvar."); return; }
-  let totM2=0,custo=0;
-  itens.forEach(it=>{ const {m2}=itemM2Pecas(it); totM2+=m2; custo+=custoProducaoM2(it.cor,+it.esp,it.aditivo).total*m2; });
-  const lista=store.get();
-  lista.unshift({ id:Date.now(), ref:(document.getElementById("pedidoRef").value||"").trim(), data:new Date().toISOString(), itens:JSON.parse(JSON.stringify(itens)), totM2, custo });
-  store.set(lista); renderSalvos();
-  const b=document.getElementById("savePedido"); const o=b.textContent; b.textContent="Salvo ✓"; setTimeout(()=>b.textContent=o,1400);
-});
-function renderSalvos(){
-  const box=document.getElementById("savedList"); const lista=store.get();
-  if(!lista.length){ box.innerHTML=`<div class="empty">Nenhum pedido salvo ainda.</div>`; return; }
-  box.innerHTML=`<div class="saved-list">`+lista.map(p=>{
-    const d=new Date(p.data).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
-    return `<div class="saved">
-      <div class="info"><div class="nm">${p.ref||"Pedido sem referência"}</div>
-        <div class="meta">${d} · ${p.itens.length} ${p.itens.length>1?"itens":"item"} · ${nf(p.totM2,2)} m²</div></div>
-      <div class="tot">${money(p.custo)}</div>
-      <div class="acts"><button class="btn ghost" data-load="${p.id}">Carregar</button><button class="btn danger" data-del-saved="${p.id}">Excluir</button></div>
-    </div>`;
-  }).join("")+`</div>`;
-}
-document.getElementById("savedList").addEventListener("click",e=>{
-  const l=e.target.closest("[data-load]"), d=e.target.closest("[data-del-saved]");
-  if(l){ const p=store.get().find(x=>x.id==l.dataset.load); if(p){ pedido=JSON.parse(JSON.stringify(p.itens)); document.getElementById("pedidoRef").value=p.ref||""; renderPedido(); showTab("pedido"); } }
-  if(d){ if(confirm("Excluir este pedido salvo?")){ store.set(store.get().filter(x=>x.id!=d.dataset.delSaved)); renderSalvos(); } }
+function clienteDoForm(){ return { nome:$("cliNome").value.trim(), tel:$("cliTel").value.trim(), cnpj:$("cliCnpj").value.trim(), endereco:$("cliEndereco").value.trim() }; }
+
+$("salvarOrc").addEventListener("click",()=>{
+  const itens=orcItens.filter(it=>it.qtd>0);
+  if(!$("cliNome").value.trim()){ alert("Informe o nome do cliente."); return; }
+  if(!itens.length){ alert("Adicione ao menos um item com quantidade."); return; }
+  const desc=parseFloat(($("descInput").value||"").replace(",","."))||0;
+  const regime=$("regimeSelect").value;
+  const r=calcOrcamento(itens,desc,regime);
+  const lista=DB.read("orcamentos",[]);
+  if(editandoId){
+    const o=lista.find(x=>x.id===editandoId);
+    Object.assign(o,{ cliente:clienteDoForm(), itens:JSON.parse(JSON.stringify(itens)), ...r });
+  } else {
+    const num=(DB.read("seqOrc",0))+1; DB.write("seqOrc",num);
+    lista.unshift({ id:Date.now(), numero:num, vendedorId:SESSION.id, vendedorNome:SESSION.nome, data:new Date().toISOString(), cliente:clienteDoForm(), itens:JSON.parse(JSON.stringify(itens)), ...r });
+  }
+  DB.write("orcamentos",lista); resetOrcForm(); renderOrcList();
+  const b=$("salvarOrc"); b.textContent="Salvo ✓"; setTimeout(()=>b.textContent="Salvar orçamento",1400);
 });
 
-/* ================================================================ PREÇOS & CUSTOS ================================================================ */
-function media(vals){ const f=vals.filter(v=>v>0); return f.length? f.reduce((a,b)=>a+b,0)/f.length : 0; }
-function vendaFor(prodId, corId, esp){
-  const cores=Object.keys(CONFIG.cores);
-  if(prodId && corId) return CONFIG.precoVenda[prodId]?.[corId]?.[esp] || 0;
-  if(prodId && !corId) return media(cores.map(c=>CONFIG.precoVenda[prodId]?.[c]?.[esp]||0));
-  if(!prodId && corId) return media(CONFIG.produtos.map(p=>CONFIG.precoVenda[p.id]?.[corId]?.[esp]||0));
-  return media(CONFIG.produtos.flatMap(p=>cores.map(c=>CONFIG.precoVenda[p.id]?.[c]?.[esp]||0)));
+/* ================================================================ ORÇAMENTO — LISTA ================================================================ */
+function badgeFor(s){ return {aprovado:'<span class="badge ok">Aprovado</span>',aguardando:'<span class="badge wait">Aguardando aprovação</span>',reprovado:'<span class="badge no">Reprovado</span>',convertido:'<span class="badge done">Pedido gerado</span>'}[s]||s; }
+function orcVisiveis(){ const l=DB.read("orcamentos",[]); return isMaster()?l:l.filter(o=>o.vendedorId===SESSION.id); }
+function renderOrcList(){
+  $("orcListTitle").textContent=isMaster()?"Todos os orçamentos":"Meus orçamentos";
+  $("novoOrcBtn").classList.toggle("hidden", !$("orcForm").classList.contains("hidden"));
+  const box=$("orcList"); const lista=orcVisiveis();
+  if(!lista.length){ box.innerHTML=`<div class="empty">Nenhum orçamento ainda.</div>`; return; }
+  box.innerHTML=lista.map(o=>{
+    const d=new Date(o.data).toLocaleDateString("pt-BR");
+    const masterInfo = isMaster()?` · margem ${nf(o.margem,1)}%`:"";
+    let acts="";
+    if(o.status==="aprovado"){ acts=`<button class="btn ghost sm" data-pdf="${o.id}">Exportar PDF</button><button class="btn sm" data-gerar="${o.id}">Gerar pedido</button>`; }
+    else if(o.status==="aguardando"){ acts = isMaster()
+        ? `<button class="btn sm" data-aprovar="${o.id}">Aprovar</button><button class="btn danger sm" data-reprovar="${o.id}">Reprovar</button>`
+        : `<span class="badge wait">no Master</span>`; }
+    else if(o.status==="convertido"){ acts=`<button class="btn ghost sm" data-pdf="${o.id}">PDF</button>`; }
+    else if(o.status==="reprovado" && !isMaster()){ acts=`<button class="btn ghost sm" data-edit="${o.id}">Revisar</button>`; }
+    return `<div class="row-item">
+      <div class="info"><div class="ti">Nº ${o.numero} · ${o.cliente.nome} ${badgeFor(o.status)}</div>
+        <div class="meta">${d} · ${o.itens.length} ${o.itens.length>1?"itens":"item"}${o.desconto>0?` · desc ${nf(o.desconto,1)}%`:""} · vend. ${o.vendedorNome}${masterInfo}</div></div>
+      <div class="val">${money(o.vendaFinal)}<small>venda</small></div>
+      <div class="acts">${acts}</div></div>`;
+  }).join("");
 }
-function custoBaseFor(corId, esp){
-  const cores=Object.keys(CONFIG.cores);
-  return corId ? custoProducaoM2(corId,esp,false).total : media(cores.map(c=>custoProducaoM2(c,esp,false).total));
+$("orcList").addEventListener("click",e=>{
+  const g=e.target.closest("[data-gerar]"), pdf=e.target.closest("[data-pdf]"), ap=e.target.closest("[data-aprovar]"), rp=e.target.closest("[data-reprovar]"), ed=e.target.closest("[data-edit]");
+  const lista=DB.read("orcamentos",[]);
+  if(pdf){ const o=lista.find(x=>x.id==pdf.dataset.pdf); exportarPDF(o); }
+  if(g){ const o=lista.find(x=>x.id==g.dataset.gerar); gerarPedido(o); }
+  if(ap){ const o=lista.find(x=>x.id==ap.dataset.aprovar); o.status="aprovado"; o.aprovadoPor=SESSION.nome; DB.write("orcamentos",lista); renderOrcList(); }
+  if(rp){ const o=lista.find(x=>x.id==rp.dataset.reprovar); o.status="reprovado"; DB.write("orcamentos",lista); renderOrcList(); }
+  if(ed){ const o=lista.find(x=>x.id==ed.dataset.edit); carregarOrc(o); }
+});
+function carregarOrc(o){ orcItens=JSON.parse(JSON.stringify(o.itens)); editandoId=o.id; $("cliNome").value=o.cliente.nome; $("cliTel").value=o.cliente.tel||""; $("cliCnpj").value=o.cliente.cnpj||""; $("cliEndereco").value=o.cliente.endereco||""; $("regimeSelect").value=o.regime||"simples"; $("descInput").value=o.desconto||""; $("orcForm").classList.remove("hidden"); $("toggleForm").textContent="Ocultar"; $("salvarOrc").textContent="Atualizar orçamento"; renderOrcRows(); window.scrollTo({top:0,behavior:"smooth"}); }
+
+/* ================================================================ GERAR PEDIDO ================================================================ */
+function gerarPedido(o){
+  const peds=DB.read("pedidos",[]);
+  const num=(DB.read("seqPed",0))+1; DB.write("seqPed",num);
+  peds.unshift({ id:Date.now(), numero:num, orcamentoId:o.id, orcNumero:o.numero, data:new Date().toISOString(), cliente:o.cliente, regime:o.regime, vendedorNome:o.vendedorNome, itens:JSON.parse(JSON.stringify(o.itens)), vendaFinal:o.vendaFinal, custo:o.custo, status:"em_producao" });
+  DB.write("pedidos",peds);
+  const lista=DB.read("orcamentos",[]); const oo=lista.find(x=>x.id===o.id); if(oo) oo.status="convertido"; DB.write("orcamentos",lista);
+  renderOrcList(); alert("Pedido Nº "+num+" gerado. Já aparece em Pedidos"+(isMaster()?" e Produção.":"."));
 }
+
+/* ================================================================ PEDIDOS ================================================================ */
+function pedVisiveis(){ const l=DB.read("pedidos",[]); return isMaster()?l:l.filter(p=>{ const o=DB.read("orcamentos",[]).find(x=>x.id===p.orcamentoId); return o?o.vendedorId===SESSION.id:true; }); }
+function renderPedidos(){
+  const box=$("pedList"); const lista=pedVisiveis();
+  if(!lista.length){ box.innerHTML=`<div class="empty">Nenhum pedido gerado ainda.</div>`; return; }
+  box.innerHTML=lista.map(p=>{
+    const d=new Date(p.data).toLocaleDateString("pt-BR");
+    return `<div class="row-item">
+      <div class="info"><div class="ti">Pedido Nº ${p.numero} · ${p.cliente.nome} <span class="badge done">Em produção</span></div>
+        <div class="meta">${d} · orçamento Nº ${p.orcNumero} · ${p.itens.length} ${p.itens.length>1?"itens":"item"} · vend. ${p.vendedorNome}</div></div>
+      <div class="val">${money(p.vendaFinal)}<small>venda</small></div></div>`;
+  }).join("");
+}
+
+/* ================================================================ PRODUÇÃO (master) ================================================================ */
+function materialDoPedido(p){ let rf=0,rg=0,ad=0,res=0; const pig={}; p.itens.forEach(it=>{ const {m2}=itemM2Pecas(it); const m=materialM2(it.cor,+it.esp,it.aditivo); rf+=m.raspaFina*m2; rg+=m.raspaGrossa*m2; ad+=m.aditivo*m2; res+=m.resina*m2; Object.entries(m.pigmentos).forEach(([k,v])=>pig[k]=(pig[k]||0)+v*m2); }); return {rf,rg,ad,res,pig}; }
+function matListHTML(m){
+  let h=`<div class="mat-list">
+    <div class="mat-item"><span class="dot" style="background:var(--raspa-f)"></span><span class="nm">Raspa fina</span><span class="kg">${nf(m.rf,1)}<span class="u">kg</span></span></div>
+    <div class="mat-item"><span class="dot" style="background:var(--raspa-g)"></span><span class="nm">Raspa grossa</span><span class="kg">${nf(m.rg,1)}<span class="u">kg</span></span></div>`;
+  if(m.ad>0) h+=`<div class="mat-item"><span class="dot" style="background:var(--aditivo)"></span><span class="nm">Aditivo</span><span class="kg">${nf(m.ad,1)}<span class="u">kg</span></span></div>`;
+  h+=`<div class="mat-item"><span class="dot" style="background:var(--resina)"></span><span class="nm">Resina</span><span class="kg">${nf(m.res,2)}<span class="u">kg</span></span></div>`;
+  Object.entries(m.pig).filter(([,v])=>v>0).forEach(([k,v])=>{ h+=`<div class="mat-item"><span class="dot" style="background:${pigSw(k)}"></span><span class="nm">Pigmento ${pigLabel(k)}</span><span class="kg">${nf(v,2)}<span class="u">kg</span></span></div>`; });
+  return h+`</div>`;
+}
+function renderProducao(){
+  const peds=DB.read("pedidos",[]).filter(p=>p.status==="em_producao");
+  if(!peds.length){ $("prodTotal").innerHTML=`<div class="empty">Nenhum pedido em produção.</div>`; $("prodList").innerHTML=""; return; }
+  const tot={rf:0,rg:0,ad:0,res:0,pig:{}};
+  peds.forEach(p=>{ const m=materialDoPedido(p); tot.rf+=m.rf; tot.rg+=m.rg; tot.ad+=m.ad; tot.res+=m.res; Object.entries(m.pig).forEach(([k,v])=>tot.pig[k]=(tot.pig[k]||0)+v); });
+  $("prodTotal").innerHTML=matListHTML(tot);
+  $("prodList").innerHTML=peds.map(p=>{ const m=materialDoPedido(p); const itens=p.itens.map(it=>{const {m2,pc}=itemM2Pecas(it); return `${prodNome(it.produto)} ${corLabel(it.cor)} ${it.esp}mm — ${it.base==="m2"?nf(m2,2)+" m²":nf(pc)+" pç"}`;}).join("<br>");
+    return `<div class="row-item" style="align-items:flex-start"><div class="info"><div class="ti">Pedido Nº ${p.numero} · ${p.cliente.nome}</div><div class="meta" style="margin-top:6px;line-height:1.7">${itens}</div></div><div style="min-width:220px">${matListHTML(m)}</div></div>`;
+  }).join("");
+}
+
+/* ================================================================ EXPORTAR PDF (impressão) ================================================================ */
+function exportarPDF(o){
+  const dataStr=new Date(o.data).toLocaleDateString("pt-BR");
+  const val=new Date(Date.now()+7*864e5).toLocaleDateString("pt-BR");
+  const linhas=o.itens.map(it=>{ const {m2,pc}=itemM2Pecas(it); const p=precoVendaItem(it); const q=it.base==="m2"?nf(m2,2)+" m²":nf(pc)+" pç"; return `<tr><td>${prodNome(it.produto)}</td><td>${corLabel(it.cor)}</td><td>${it.esp} mm</td><td style="text-align:right">${q}</td><td style="text-align:right">${money(p.venda)}</td></tr>`; }).join("");
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Orçamento Nº ${o.numero} — KASFLOOR</title>
+  <style>
+    body{font-family:'Manrope',Arial,sans-serif;color:#16241A;max-width:760px;margin:0 auto;padding:36px}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #2E8B43;padding-bottom:16px;margin-bottom:22px}
+    .logo{font-family:'Space Grotesk',Arial;font-weight:700;font-size:28px;color:#1E6B30}
+    .logo span{font-size:12px;font-weight:600;color:#7C8C7E;display:block}
+    .doc{text-align:right;font-size:13px;color:#46584A}.doc b{font-size:18px;color:#16241A;font-family:'Space Grotesk',Arial}
+    .cli{background:#F5F8F2;border:1px solid #E1E8DD;border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:14px}
+    .cli b{color:#1E6B30}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px}
+    th,td{padding:9px 10px;border-bottom:1px solid #E1E8DD;text-align:left}
+    th{background:#F5F8F2;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7C8C7E}
+    .tot{margin-top:6px;font-size:14px}.tot table{margin-left:auto;width:auto;min-width:300px}
+    .tot .big td{font-size:20px;font-weight:700;color:#1E6B30;font-family:'Space Grotesk',Arial;border-top:2px solid #CCD8C6}
+    .ft{margin-top:34px;font-size:11.5px;color:#7C8C7E;border-top:1px solid #E1E8DD;padding-top:14px}
+    @media print{body{padding:10px}}
+  </style></head><body onload="window.print()">
+    <div class="hd"><div class="logo">KASFLOOR<span>Pisos e placas emborrachadas</span></div>
+      <div class="doc"><b>Orçamento Nº ${o.numero}</b><br>Data: ${dataStr}<br>Validade: ${val}</div></div>
+    <div class="cli"><b>Cliente:</b> ${o.cliente.nome}${o.cliente.tel?` &nbsp;·&nbsp; <b>Tel:</b> ${o.cliente.tel}`:""}${o.cliente.cnpj?`<br><b>CNPJ/CPF:</b> ${o.cliente.cnpj}`:""}${o.cliente.endereco?`<br><b>Endereço:</b> ${o.cliente.endereco}`:""}<br><b>Vendedor:</b> ${o.vendedorNome} &nbsp;·&nbsp; <b>Regime fiscal:</b> ${REGIME_LABELS[o.regime]||REGIME_LABELS.simples}</div>
+    <table><thead><tr><th>Produto</th><th>Cor</th><th>Espessura</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th></tr></thead><tbody>${linhas}</tbody></table>
+    <div class="tot"><table>
+      <tr><td>Subtotal</td><td style="text-align:right">${money(o.vendaCheia)}</td></tr>
+      ${o.desconto>0?`<tr><td>Desconto (${nf(o.desconto,1)}%)</td><td style="text-align:right;color:#C0392B">− ${money(o.vendaCheia-o.vendaFinal)}</td></tr>`:""}
+      <tr class="big"><td>Total</td><td style="text-align:right">${money(o.vendaFinal)}</td></tr>
+    </table></div>
+    <div class="ft">Valores em reais (R$). Orçamento sujeito a confirmação de disponibilidade. Impostos calculados conforme regime fiscal informado (${REGIME_LABELS[o.regime]||REGIME_LABELS.simples}).</div>
+  </body></html>`;
+  const w=window.open("","_blank"); if(!w){ alert("Permita pop-ups para exportar o PDF."); return; }
+  w.document.write(html); w.document.close();
+}
+
+/* ================================================================ PREÇOS & CUSTOS (master) ================================================================ */
+function media(v){ const f=v.filter(x=>x>0); return f.length?f.reduce((a,b)=>a+b,0)/f.length:0; }
+function vendaFor(prod,cor,esp){ const cores=Object.keys(CONFIG.cores);
+  if(prod&&cor) return CONFIG.precoVenda[prod]?.[cor]?.[esp]||0;
+  if(prod&&!cor) return media(cores.map(c=>CONFIG.precoVenda[prod]?.[c]?.[esp]||0));
+  if(!prod&&cor) return media(CONFIG.produtos.map(p=>CONFIG.precoVenda[p.id]?.[cor]?.[esp]||0));
+  return media(CONFIG.produtos.flatMap(p=>cores.map(c=>CONFIG.precoVenda[p.id]?.[c]?.[esp]||0))); }
+function custoBaseFor(cor,esp){ const cores=Object.keys(CONFIG.cores); return cor?custoProdM2(cor,esp,false):media(cores.map(c=>custoProdM2(c,esp,false))); }
 function renderPrecos(){
-  const fP=document.getElementById("filtroProduto"), fC=document.getElementById("filtroCor");
+  const fP=$("filtroProduto"),fC=$("filtroCor");
   if(!fP.options.length) fP.innerHTML=`<option value="">Todos (média)</option>`+CONFIG.produtos.map(p=>`<option value="${p.id}">${p.nome}</option>`).join("");
   if(!fC.options.length) fC.innerHTML=`<option value="">Todas (média)</option>`+Object.entries(CONFIG.cores).map(([k,c])=>`<option value="${k}">${c.label}</option>`).join("");
-  const prodId=fP.value, corId=fC.value;
-  const cores=Object.keys(CONFIG.cores);
-
-  // comparativo por espessura (piso + cor selecionados) com coluna de encargos
-  let comp=`<thead><tr><th>Espessura</th><th>Venda /m²</th><th>Custo produção</th><th>Imp.+Com.+Desc.</th><th>Custo total</th><th>Lucro / Prejuízo</th><th>Margem</th></tr></thead><tbody>`;
-  CONFIG.espessuras.forEach(e=>{
-    const custoProd=custoBaseFor(corId,e);
-    const v=vendaFor(prodId,corId,e);
-    let enc="—",cTot="—",luc="—",marg="—",cls="";
-    if(v>0){ const encargos=v*taxaVenda(); const custoTotal=custoProd+encargos; const lucro=v-custoTotal;
-      enc=money(encargos); cTot=money(custoTotal); luc=money(lucro); marg=nf(lucro/custoTotal*100,1)+"%"; cls=lucro>=0?"pos":"neg"; }
-    comp+=`<tr><td>${e} mm</td><td>${v>0?money(v):"—"}</td><td>${money(custoProd)}</td><td>${enc}</td><td>${cTot}</td>
-      <td class="${cls}" style="font-weight:700">${luc}</td><td class="${cls}">${marg}</td></tr>`;
-  });
-  comp+=`</tbody>`;
-  document.getElementById("tblComparativo").innerHTML=comp;
-
-  // venda por cor × espessura (editável quando um piso está selecionado)
-  const editable=!!prodId;
-  document.getElementById("vendaTitle").textContent = editable ? `Preço de venda — ${CONFIG.produtos.find(p=>p.id===prodId).nome}` : "Preço de venda médio por m²";
-  document.getElementById("vendaDesc").textContent = editable ? "Editável por cor e espessura. É a base do lucro." : "Média dos pisos com preço definido. Selecione um piso para editar.";
-  let tv=`<thead><tr><th>Cor</th>${CONFIG.espessuras.map(e=>`<th>${e} mm</th>`).join("")}</tr></thead><tbody>`;
-  cores.forEach(cor=>{
-    tv+=`<tr><td><span class="swatch" style="background:${CONFIG.cores[cor].sw}"></span>${CONFIG.cores[cor].label}</td>`;
-    CONFIG.espessuras.forEach(e=>{
-      const v = editable ? (CONFIG.precoVenda[prodId]?.[cor]?.[e]||0) : vendaFor("",cor,e);
-      tv+= editable
-        ? `<td><input class="venda-inp" data-cor="${cor}" data-e="${e}" type="text" inputmode="numeric" value="${centsToBR(Math.round(v*100))}" style="width:104px;text-align:right;font-family:var(--display);font-weight:600;border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td>`
-        : `<td>${v>0?money(v):"—"}</td>`;
-    });
-    tv+=`</tr>`;
-  });
-  tv+=`</tbody>`;
-  document.getElementById("tblVenda").innerHTML=tv;
-
-  // custo e lucro por cor × espessura (cada cor com a própria venda)
+  const prod=fP.value,cor=fC.value,cores=Object.keys(CONFIG.cores);
+  let comp=`<thead><tr><th>Espessura</th><th>Venda /m²</th><th>Custo produção</th><th>Imp.+Com.+Desc.</th><th>Custo total</th><th>Lucro</th><th>Margem</th></tr></thead><tbody>`;
+  CONFIG.espessuras.forEach(e=>{ const cp=custoBaseFor(cor,e),v=vendaFor(prod,cor,e); let enc="—",ct="—",luc="—",mg="—",cls="";
+    if(v>0){ const en=v*taxaVenda(),t=cp+en,l=v-t; enc=money(en);ct=money(t);luc=money(l);mg=nf(l/t*100,1)+"%";cls=l>=0?"pos":"neg"; }
+    comp+=`<tr><td>${e} mm</td><td>${v>0?money(v):"—"}</td><td>${money(cp)}</td><td>${enc}</td><td>${ct}</td><td class="${cls}" style="font-weight:700">${luc}</td><td class="${cls}">${mg}</td></tr>`; });
+  $("tblComparativo").innerHTML=comp+`</tbody>`;
   let tc=`<thead><tr><th>Cor</th>${CONFIG.espessuras.map(e=>`<th>${e} mm</th>`).join("")}</tr></thead><tbody>`;
-  cores.forEach(cor=>{
-    tc+=`<tr><td><span class="swatch" style="background:${CONFIG.cores[cor].sw}"></span>${CONFIG.cores[cor].label}</td>`;
-    CONFIG.espessuras.forEach(e=>{
-      const custo=custoProducaoM2(cor,e,false).total; const v=vendaFor(prodId,cor,e);
-      let luc="—",cls="";
-      if(v>0){ const L=lucroM2(cor,e,v); luc=money(L.lucro); cls=L.lucro>=0?"pos":"neg"; }
-      tc+=`<td><span class="cell-cost">${money(custo)}</span><small class="${cls}">${luc}</small></td>`;
-    });
-    tc+=`</tr>`;
-  });
-  tc+=`</tbody>`;
-  document.getElementById("tblCusto").innerHTML=tc;
+  cores.forEach(c=>{ tc+=`<tr><td><span class="swatch" style="background:${CONFIG.cores[c].sw}"></span>${CONFIG.cores[c].label}</td>`;
+    CONFIG.espessuras.forEach(e=>{ const custo=custoProdM2(c,e,false),v=vendaFor(prod,c,e); let luc="—",cls=""; if(v>0){const l=v-(custo+v*taxaVenda());luc=money(l);cls=l>=0?"pos":"neg";} tc+=`<td><span style="color:var(--ink-2)">${money(custo)}</span><small class="${cls}">${luc}</small></td>`; });
+    tc+=`</tr>`; });
+  $("tblCusto").innerHTML=tc+`</tbody>`;
+}
 
-  let tm=`<thead><tr><th>Espessura</th><th>Raspa fina</th><th>Raspa grossa</th><th>Resina</th><th>Peso total</th></tr></thead><tbody>`;
-  CONFIG.espessuras.forEach(e=>{ const m=materialPorM2("preto",e,false); const peso=m.raspaFina+m.raspaGrossa+m.resina;
-    tm+=`<tr><td>${e} mm</td><td>${nf(m.raspaFina,2)} kg</td><td>${nf(m.raspaGrossa,2)} kg</td><td>${nf(m.resina,2)} kg</td><td>${nf(peso,2)} kg</td></tr>`; });
-  tm+=`</tbody>`; document.getElementById("tblMaterial").innerHTML=tm;
-}
-document.getElementById("filtroProduto").addEventListener("change", renderPrecos);
-document.getElementById("filtroCor").addEventListener("change", renderPrecos);
-document.getElementById("tblVenda").addEventListener("input", e=>{
-  const inp=e.target; if(!inp.classList.contains("venda-inp")) return;
-  const digits=inp.value.replace(/\D/g,""); const cents=digits?parseInt(digits,10):0;
-  inp.value=centsToBR(cents);
-  const prodId=document.getElementById("filtroProduto").value, cor=inp.dataset.cor, esp=inp.dataset.e;
-  if(prodId){ (CONFIG.precoVenda[prodId] ||= {}); (CONFIG.precoVenda[prodId][cor] ||= {}); CONFIG.precoVenda[prodId][cor][esp]=cents/100; }
-  renderPrecosKeepFocus(cor,esp);
-});
-function renderPrecosKeepFocus(cor,esp){ renderPrecos(); const el=document.querySelector(`.venda-inp[data-cor="${cor}"][data-e="${esp}"]`); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
-
-/* ================================================================ CONFIGURAÇÕES ================================================================ */
-function moneyInput(initial, onChange){
-  const inp=document.createElement("input"); inp.type="text"; inp.inputMode="numeric";
-  let cents=Math.round((initial||0)*100); inp.value=centsToBR(cents);
-  inp.addEventListener("input",()=>{ const d=inp.value.replace(/\D/g,""); cents=d?parseInt(d,10):0; inp.value=centsToBR(cents); onChange(cents/100); });
-  return inp;
-}
-function numInput(initial, onChange, step="any"){
-  const inp=document.createElement("input"); inp.type="number"; inp.step=step; inp.inputMode="decimal"; inp.value=initial;
-  inp.addEventListener("input",()=>{ const v=parseFloat(inp.value.replace(",",".")); onChange(isNaN(v)?0:v); }); return inp;
-}
-function field(label,unit,input){ const w=document.createElement("div"); w.className="cfg-field";
-  w.innerHTML=`<label>${label} <span class="u">${unit||""}</span></label>`; w.appendChild(input); return w; }
+/* ================================================================ CONFIGURAÇÕES (master) ================================================================ */
+const centsToBR=c=>"R$ "+new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format((c||0)/100);
+function moneyInput(init,on){ const i=document.createElement("input"); i.type="text"; i.inputMode="numeric"; let c=Math.round((init||0)*100); i.value=centsToBR(c); i.addEventListener("input",()=>{ const d=i.value.replace(/\D/g,""); c=d?parseInt(d,10):0; i.value=centsToBR(c); on(c/100); }); return i; }
+function numInput(init,on){ const i=document.createElement("input"); i.type="number"; i.step="any"; i.inputMode="decimal"; i.value=init; i.addEventListener("input",()=>{ const v=parseFloat(i.value.replace(",",".")); on(isNaN(v)?0:v); }); return i; }
+function field(l,u,inp){ const w=document.createElement("div"); w.className="cfg-field"; w.innerHTML=`<label>${l} <span class="u">${u||""}</span></label>`; w.appendChild(inp); return w; }
 
 function renderConfig(){
-  const ci=document.getElementById("cfgInsumos"); ci.innerHTML="";
-  ci.append(
-    field("Raspa fina","R$/kg", moneyInput(CONFIG.insumos.raspaFina,v=>{CONFIG.insumos.raspaFina=v;recalcAll();})),
-    field("Raspa grossa","R$/kg", moneyInput(CONFIG.insumos.raspaGrossa,v=>{CONFIG.insumos.raspaGrossa=v;recalcAll();})),
-    field("Aditivo","R$/kg", moneyInput(CONFIG.insumos.aditivo,v=>{CONFIG.insumos.aditivo=v;recalcAll();})),
-    field("Resina","R$/kg", moneyInput(CONFIG.insumos.resina,v=>{CONFIG.insumos.resina=v;recalcAll();})),
-  );
-  const cp=document.getElementById("cfgPigmentos"); cp.innerHTML="";
-  Object.keys(CONFIG.pigmentos).forEach(p=> cp.append(field(pigLabel(p),"R$/kg", moneyInput(CONFIG.pigmentos[p],v=>{CONFIG.pigmentos[p]=v;recalcAll();}))));
-
-  const cf=document.getElementById("cfgFixos"); cf.innerHTML="";
-  cf.append(
-    field("Mão de obra direta","R$/m²", moneyInput(CONFIG.fixos.maoObraM2,v=>{CONFIG.fixos.maoObraM2=v;recalcAll();})),
-    field("Custo indireto (folha)","R$/mês", moneyInput(CONFIG.fixos.custoIndireto,v=>{CONFIG.fixos.custoIndireto=v;recalcAll();})),
-    field("Máquinas","un", numInput(CONFIG.fixos.maquinas,v=>{CONFIG.fixos.maquinas=v;recalcAll();})),
-    field("m² por máquina / hora","m²", numInput(CONFIG.fixos.m2PorMaquinaHora,v=>{CONFIG.fixos.m2PorMaquinaHora=v;recalcAll();})),
-    field("Horas / mês","h", numInput(CONFIG.fixos.horasMes,v=>{CONFIG.fixos.horasMes=v;recalcAll();})),
-  );
-  const ca=document.getElementById("cfgAdm"); ca.innerHTML="";
-  Object.keys(CONFIG.adm).forEach(nome=> ca.append(field(nome,"R$/mês", moneyInput(CONFIG.adm[nome],v=>{CONFIG.adm[nome]=v;recalcAll();}))));
-
-  const ct=document.getElementById("cfgTaxas"); ct.innerHTML="";
-  ct.append(
-    field("Imposto","%", numInput(CONFIG.taxas.imposto*100,v=>{CONFIG.taxas.imposto=v/100;recalcAll();})),
-    field("Comissão","%", numInput(CONFIG.taxas.comissao*100,v=>{CONFIG.taxas.comissao=v/100;recalcAll();})),
-    field("Desconto","%", numInput(CONFIG.taxas.desconto*100,v=>{CONFIG.taxas.desconto=v/100;recalcAll();})),
-  );
-
+  const cm=$("cfgMargens"); cm.innerHTML="";
+  cm.append(field("Margem alvo","% sobre o custo",numInput(CONFIG.margemAlvo,v=>{CONFIG.margemAlvo=v;saveConfig();renderOrcTotals();renderOrcRows();})),
+            field("Margem mínima","% (trava)",numInput(CONFIG.margemMinima,v=>{CONFIG.margemMinima=v;saveConfig();renderOrcTotals();})));
+  renderUsers();
+  const ci=$("cfgInsumos"); ci.innerHTML="";
+  ci.append(field("Raspa fina","R$/kg",moneyInput(CONFIG.insumos.raspaFina,v=>{CONFIG.insumos.raspaFina=v;saveConfig();})),
+    field("Raspa grossa","R$/kg",moneyInput(CONFIG.insumos.raspaGrossa,v=>{CONFIG.insumos.raspaGrossa=v;saveConfig();})),
+    field("Aditivo","R$/kg",moneyInput(CONFIG.insumos.aditivo,v=>{CONFIG.insumos.aditivo=v;saveConfig();})),
+    field("Resina","R$/kg",moneyInput(CONFIG.insumos.resina,v=>{CONFIG.insumos.resina=v;saveConfig();})));
+  const cp=$("cfgPigmentos"); cp.innerHTML="";
+  Object.keys(CONFIG.pigmentos).forEach(p=>cp.append(field(pigLabel(p),"R$/kg",moneyInput(CONFIG.pigmentos[p],v=>{CONFIG.pigmentos[p]=v;saveConfig();}))));
+  const cf=$("cfgFixos"); cf.innerHTML="";
+  cf.append(field("Mão de obra direta","R$/m²",moneyInput(CONFIG.fixos.maoObraM2,v=>{CONFIG.fixos.maoObraM2=v;saveConfig();updateAdm();})),
+    field("Custo indireto (folha)","R$/mês",moneyInput(CONFIG.fixos.custoIndireto,v=>{CONFIG.fixos.custoIndireto=v;saveConfig();updateAdm();})),
+    field("Máquinas","un",numInput(CONFIG.fixos.maquinas,v=>{CONFIG.fixos.maquinas=v;saveConfig();updateAdm();})),
+    field("m² por máquina / hora","m²",numInput(CONFIG.fixos.m2PorMaquinaHora,v=>{CONFIG.fixos.m2PorMaquinaHora=v;saveConfig();updateAdm();})),
+    field("Horas / mês","h",numInput(CONFIG.fixos.horasMes,v=>{CONFIG.fixos.horasMes=v;saveConfig();updateAdm();})));
+  const ca=$("cfgAdm"); ca.innerHTML="";
+  Object.keys(CONFIG.adm).forEach(n=>ca.append(field(n,"R$/mês",moneyInput(CONFIG.adm[n],v=>{CONFIG.adm[n]=v;saveConfig();updateAdm();}))));
+  const ct=$("cfgTaxas"); ct.innerHTML="";
+  ct.append(field("Imposto (padrão)","%",numInput(CONFIG.taxas.imposto*100,v=>{CONFIG.taxas.imposto=v/100;saveConfig();})),
+    field("Comissão","%",numInput(CONFIG.taxas.comissao*100,v=>{CONFIG.taxas.comissao=v/100;saveConfig();})),
+    field("Desconto","%",numInput(CONFIG.taxas.desconto*100,v=>{CONFIG.taxas.desconto=v/100;saveConfig();})));
+  const cr=$("cfgRegimes"); cr.innerHTML="";
+  Object.keys(REGIME_LABELS).forEach(k=>cr.append(field(REGIME_LABELS[k],"%",numInput((CONFIG.regimes[k]||0)*100,v=>{CONFIG.regimes[k]=v/100;saveConfig();}))));
   let tr=`<thead><tr><th>Espessura</th><th>Raspa fina (fixa)</th><th>Inferior · grossa</th><th>Inferior · resina</th></tr></thead><tbody>`;
-  CONFIG.espessuras.forEach(e=>{ const r=CONFIG.raspaPorEspessura[e];
-    tr+=`<tr><td>${e} mm</td><td>${nf(CONFIG.superiorKg,2)} kg</td>
-      <td><input class="cfg-raspa" data-e="${e}" data-f="grossa" type="number" step="any" value="${r.grossa}" style="width:90px;text-align:right;font-family:var(--display);border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td>
-      <td><input class="cfg-raspa" data-e="${e}" data-f="resina" type="number" step="any" value="${r.resina}" style="width:90px;text-align:right;font-family:var(--display);border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td></tr>`; });
-  tr+=`</tbody>`; document.getElementById("cfgRaspa").innerHTML=tr;
-
-  const cpr=document.getElementById("cfgProdutos"); cpr.innerHTML="";
-  CONFIG.produtos.forEach((p,i)=> cpr.append(field(p.nome,"pç/m²", numInput(p.pecasM2,v=>{CONFIG.produtos[i].pecasM2=v;recalcAll();}))));
-
-  updateAdmOut();
+  CONFIG.espessuras.forEach(e=>{ const r=CONFIG.raspaPorEspessura[e]; tr+=`<tr><td>${e} mm</td><td>${nf(CONFIG.superiorKg,2)} kg</td>
+    <td><input class="cfg-raspa" data-e="${e}" data-f="grossa" type="number" step="any" value="${r.grossa}" style="width:88px;text-align:right;font-family:var(--display);border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td>
+    <td><input class="cfg-raspa" data-e="${e}" data-f="resina" type="number" step="any" value="${r.resina}" style="width:88px;text-align:right;font-family:var(--display);border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td></tr>`; });
+  $("cfgRaspa").innerHTML=tr+`</tbody>`;
+  updateAdm();
 }
-document.getElementById("cfgRaspa").addEventListener("input", e=>{
-  const t=e.target; if(!t.classList.contains("cfg-raspa")) return;
-  const v=parseFloat(t.value.replace(",",".")); CONFIG.raspaPorEspessura[t.dataset.e][t.dataset.f]=isNaN(v)?0:v; recalcAll();
+$("cfgRaspa").addEventListener("input",e=>{ const t=e.target; if(!t.classList.contains("cfg-raspa"))return; const v=parseFloat(t.value.replace(",",".")); CONFIG.raspaPorEspessura[t.dataset.e][t.dataset.f]=isNaN(v)?0:v; saveConfig(); });
+function updateAdm(){ $("admM2out").value=money(custoAdmM2()); }
+
+function renderUsers(){
+  const box=$("usersList"); USERS=DB.read("users",USERS);
+  box.innerHTML=USERS.map(u=>`<div class="row-item" style="margin-bottom:8px;padding:10px 14px">
+    <div class="info"><div class="ti" style="font-size:14px">${u.nome} <span class="badge ${u.papel==='master'?'ok':'done'}">${u.papel}</span></div><div class="meta">login: ${u.login}</div></div>
+    ${u.id!==SESSION.id?`<button class="btn danger sm" data-deluser="${u.id}">Remover</button>`:`<span class="meta">(você)</span>`}</div>`).join("");
+}
+$("usersList").addEventListener("click",e=>{ const d=e.target.closest("[data-deluser]"); if(!d)return; if(confirm("Remover este usuário?")){ USERS=DB.read("users",USERS).filter(u=>u.id!=d.dataset.deluser); DB.write("users",USERS); renderUsers(); } });
+$("addUserBtn").addEventListener("click",()=>{
+  const nome=$("newUserNome").value.trim(),login=$("newUserLogin").value.trim(),senha=$("newUserPass").value,papel=$("newUserRole").value;
+  if(!nome||!login||!senha){ alert("Preencha nome, login e senha."); return; }
+  USERS=DB.read("users",USERS);
+  if(USERS.some(u=>u.login===login)){ alert("Já existe um usuário com esse login."); return; }
+  USERS.push({id:Date.now(),nome,login,senha,papel}); DB.write("users",USERS);
+  $("newUserNome").value="";$("newUserLogin").value="";$("newUserPass").value="";
+  renderUsers();
 });
-function updateAdmOut(){ const a=custoAdmM2();
-  document.getElementById("admM2out").value=a.porM2.toFixed(4);
-  document.getElementById("admTotalout").value=new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(a.totalMensal);
-}
-function recalcAll(){ renderPedido(); renderPrecos(); updateAdmOut(); }
 
-/* ================================================================ ABAS ================================================================ */
-function showTab(tab){
-  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
-  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active", v.id==="view-"+tab));
-  document.getElementById("gearBtn").classList.toggle("active", tab==="config");
-  if(tab==="salvos") renderSalvos();
-}
-document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.tab)));
-document.getElementById("gearBtn").addEventListener("click",()=>showTab("config"));
-
-/* INÍCIO */
-renderPedido(); renderConfig(); renderPrecos(); renderSalvos();
+/* ================================================================ INÍCIO ================================================================ */
+(function init(){ const s=DB.read("session",null); if(s){ const u=DB.read("users",USERS).find(x=>x.id===s.id); if(u){ SESSION=u; startApp(); return; } } })();
 </script>
 </body>
 </html>
