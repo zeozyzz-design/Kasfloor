@@ -297,6 +297,10 @@
     <div class="card"><div class="cfg-sec">Pigmentos — preço e percentual por m²</div>
       <div class="scroll" id="cfgPigmentos"></div>
       <p class="note" style="margin-top:10px">O <b>% por m²</b> é aplicado sobre a base de <b>4,5 kg/m²</b> (ex.: 6% = 0,270 kg = 270 g por m²). O <b>% branco</b> soma pigmento branco para clarear/escurecer o tom (padrão 0) — o custo do pigmento puxa as duas cores. Ajuste o preço do branco na última linha.</p></div>
+    <div class="card"><div class="cfg-sec">Cadastrar nova cor</div>
+      <div class="cfg-grid" id="cfgNovaCor"></div>
+      <button class="btn sm" id="addCorBtn" style="margin-top:12px">Adicionar cor</button>
+      <p class="note" style="margin-top:10px">A nova cor passa a aparecer no seletor de cor dos orçamentos e na tabela de pigmentos acima, com o mesmo cálculo (% sobre 4,5 kg/m² + % branco).</p></div>
     <div class="card"><div class="cfg-sec">Custos fixos</div><div class="cfg-grid" id="cfgFixos"></div>
       <div class="cfg-sec" style="margin-top:20px">Despesas administrativas mensais (R$)</div><div class="cfg-grid" id="cfgAdm"></div>
       <div class="cfg-grid" style="margin-top:14px"><div class="cfg-field"><label>Custo fixo por m² <span class="u">(calculado)</span></label><input id="admM2out" readonly></div></div></div>
@@ -665,17 +669,18 @@ const cellInputCss="width:96px;text-align:right;font-family:var(--display);borde
 function renderPigmentos(){
   const wrap=$("cfgPigmentos"); wrap.innerHTML="";
   const tbl=document.createElement("table"); tbl.className="grid"; tbl.style.width="100%";
-  tbl.innerHTML="<thead><tr><th>Cor</th><th style='text-align:right'>Preço (R$/kg)</th><th style='text-align:right'>% por m²</th><th style='text-align:right'>% branco (tom)</th><th style='text-align:right'>Pigmento / m²</th></tr></thead>";
+  tbl.innerHTML="<thead><tr><th>Cor</th><th style='text-align:right'>Preço (R$/kg)</th><th style='text-align:right'>% por m²</th><th style='text-align:right'>% branco (tom)</th><th style='text-align:right'>Pigmento / m²</th><th></th></tr></thead>";
   const tb=document.createElement("tbody");
   Object.keys(CONFIG.cores).forEach(k=>{
     const c=CONFIG.cores[k], tr=document.createElement("tr");
-    const tdN=document.createElement("td"); tdN.innerHTML=`<span class="swatch" style="background:${c.sw}"></span>${c.label}`;
+    const tdN=document.createElement("td"); tdN.innerHTML=`<span class="swatch" style="background:${c.sw}"></span>${c.label}${c.custom?` <small style="color:var(--brand)">• nova</small>`:""}`;
     const tdP=document.createElement("td"); tdP.style.textAlign="right"; const mi=moneyInput(CONFIG.pigmentos[k]||0,v=>{CONFIG.pigmentos[k]=v;saveConfig();renderPigmentos();}); mi.style.cssText=cellInputCss; tdP.appendChild(mi);
     const tdPct=document.createElement("td"); tdPct.style.textAlign="right"; const ni=numInput((c.pct||0)*100,v=>{c.pct=v/100;saveConfig();renderPigmentos();}); ni.style.cssText=cellInputCss; tdPct.appendChild(ni);
     const tdW=document.createElement("td"); tdW.style.textAlign="right"; const wi=numInput((c.whitePct||0)*100,v=>{c.whitePct=v/100;saveConfig();renderPigmentos();}); wi.style.cssText=cellInputCss; tdW.appendChild(wi);
     const kg=(c.pct||0)*CONFIG.superiorKg+(c.whitePct||0)*CONFIG.superiorKg;
     const tdKg=document.createElement("td"); tdKg.style.textAlign="right"; tdKg.innerHTML=`<span style="font-family:var(--display)">${nf(kg,3)} kg</span><br><small style="color:var(--ink-2)">${money(custoPigM2(k))}/m²</small>`;
-    tr.append(tdN,tdP,tdPct,tdW,tdKg); tb.appendChild(tr);
+    const tdAc=document.createElement("td"); tdAc.style.textAlign="right"; if(c.custom){ const rb=document.createElement("button"); rb.className="btn ghost sm"; rb.textContent="Excluir"; rb.style.cssText="color:var(--neg);padding:5px 10px"; rb.onclick=()=>removeCor(k); tdAc.appendChild(rb); }
+    tr.append(tdN,tdP,tdPct,tdW,tdKg,tdAc); tb.appendChild(tr);
   });
   const trB=document.createElement("tr"); trB.style.background="var(--surface-2)";
   const b1=document.createElement("td"); b1.innerHTML=`<span class="swatch" style="background:#E3DFD3;box-shadow:inset 0 0 0 1px #C9C2AF"></span>Branco <small style="color:var(--ink-2)">(aditivo de tom)</small>`;
@@ -683,9 +688,34 @@ function renderPigmentos(){
   const b3=document.createElement("td"); b3.style.cssText="text-align:right;color:var(--ink-2)"; b3.textContent="—";
   const b4=document.createElement("td"); b4.style.cssText="text-align:right;color:var(--ink-2)"; b4.textContent="—";
   const b5=document.createElement("td"); b5.style.cssText="text-align:right;color:var(--ink-2)"; b5.textContent="—";
-  trB.append(b1,b2,b3,b4,b5); tb.appendChild(trB);
+  const b6=document.createElement("td"); trB.append(b1,b2,b3,b4,b5,b6); tb.appendChild(trB);
   tbl.appendChild(tb); wrap.appendChild(tbl);
 }
+let novaCor={nome:"",sw:"#8A5CD1",pct:0,white:0,preco:0};
+function slugCor(s){ let k=(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"").slice(0,20); if(!k)k="cor"; let base=k,n=2; while(CONFIG.cores[k]){k=base+n;n++;} return k; }
+function renderNovaCor(){
+  const wrap=$("cfgNovaCor"); wrap.innerHTML="";
+  const nome=document.createElement("input"); nome.type="text"; nome.placeholder="Ex.: Vermelho"; nome.value=novaCor.nome; nome.addEventListener("input",()=>novaCor.nome=nome.value);
+  const sw=document.createElement("input"); sw.type="color"; sw.value=novaCor.sw; sw.style.cssText="height:40px;padding:2px;width:100%"; sw.addEventListener("input",()=>novaCor.sw=sw.value);
+  wrap.append(
+    field("Nome da cor","",nome),
+    field("Amostra","cor",sw),
+    field("% por m²","",numInput(novaCor.pct*100,v=>novaCor.pct=v/100)),
+    field("Preço do pigmento","R$/kg",moneyInput(novaCor.preco,v=>novaCor.preco=v)),
+    field("% branco","tom",numInput(novaCor.white*100,v=>novaCor.white=v/100))
+  );
+}
+function removeCor(k){ if(!CONFIG.cores[k]?.custom) return; if(!confirm("Excluir a cor \""+CONFIG.cores[k].label+"\"?")) return; delete CONFIG.cores[k]; delete CONFIG.pigmentos[k]; saveConfig(); renderConfig(); renderPrecos(); renderOrcRows(); }
+$("addCorBtn").addEventListener("click",()=>{
+  const nome=(novaCor.nome||"").trim(); if(!nome){ alert("Informe o nome da cor."); return; }
+  const k=slugCor(nome);
+  CONFIG.cores[k]={label:nome,sw:novaCor.sw,pct:+novaCor.pct||0,whitePct:+novaCor.white||0,custom:true};
+  CONFIG.pigmentos[k]=+novaCor.preco||0;
+  saveConfig();
+  novaCor={nome:"",sw:"#8A5CD1",pct:0,white:0,preco:0};
+  renderConfig(); renderPrecos(); renderOrcRows();
+  const b=$("addCorBtn"); b.textContent="Cor adicionada ✓"; setTimeout(()=>b.textContent="Adicionar cor",1400);
+});
 
 function renderConfig(){
   const cm=$("cfgMargens"); cm.innerHTML="";
@@ -697,7 +727,7 @@ function renderConfig(){
     field("Raspa grossa","R$/kg",moneyInput(CONFIG.insumos.raspaGrossa,v=>{CONFIG.insumos.raspaGrossa=v;saveConfig();})),
     field("Aditivo","R$/kg",moneyInput(CONFIG.insumos.aditivo,v=>{CONFIG.insumos.aditivo=v;saveConfig();})),
     field("Resina","R$/kg",moneyInput(CONFIG.insumos.resina,v=>{CONFIG.insumos.resina=v;saveConfig();})));
-  renderPigmentos();
+  renderPigmentos(); renderNovaCor();
   const cf=$("cfgFixos"); cf.innerHTML="";
   cf.append(field("Mão de obra direta","R$/m²",moneyInput(CONFIG.fixos.maoObraM2,v=>{CONFIG.fixos.maoObraM2=v;saveConfig();updateAdm();})),
     field("Custo indireto (folha)","R$/mês",moneyInput(CONFIG.fixos.custoIndireto,v=>{CONFIG.fixos.custoIndireto=v;saveConfig();updateAdm();})),
