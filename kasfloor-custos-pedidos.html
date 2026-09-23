@@ -198,7 +198,7 @@
   <header class="topbar">
     <div class="brand">
       <svg width="38" height="38" viewBox="0 0 40 40"><rect x="3" y="3" width="16" height="16" rx="4" fill="#2E8B43"/><rect x="21" y="3" width="16" height="16" rx="4" fill="#7FC98A"/><rect x="3" y="21" width="16" height="16" rx="4" fill="#A7DBAE"/><rect x="21" y="21" width="16" height="16" rx="4" fill="#1E6B30"/></svg>
-      <div><div class="name">KASFLOOR</div><div class="sub">ERP · Orçamentos, Pedidos e Produção</div></div>
+      <div><div class="name">KASFLOOR</div><div class="sub">ERP · Orçamentos, Pedidos e PCP</div></div>
     </div>
     <div class="userbox">
       <div class="who"><div class="u" id="whoName">—</div><div class="r" id="whoRole">—</div></div>
@@ -266,7 +266,7 @@
 
   <!-- PRODUÇÃO (master) -->
   <section class="view" id="view-producao">
-    <div class="card"><h2>Necessidade total de material</h2><p class="desc">Soma de todos os pedidos em produção — o que comprar por demanda.</p><div id="prodTotal"></div></div>
+    <div class="card"><h2>PCP — Planejamento e Controle de Produção</h2><p class="desc">Necessidade total de material — soma de todos os pedidos em produção, o que comprar por demanda.</p><div id="prodTotal"></div></div>
     <div class="card"><h2>Por pedido</h2><div id="prodList"></div></div>
   </section>
 
@@ -294,7 +294,9 @@
       <button class="btn sm" id="addUserBtn" style="margin-top:12px">Adicionar usuário</button>
     </div>
     <div class="card"><div class="cfg-sec">Insumos — preço (R$/kg)</div><div class="cfg-grid" id="cfgInsumos"></div></div>
-    <div class="card"><div class="cfg-sec">Pigmentos — preço (R$/kg)</div><div class="cfg-grid" id="cfgPigmentos"></div></div>
+    <div class="card"><div class="cfg-sec">Pigmentos — preço e percentual por m²</div>
+      <div class="scroll" id="cfgPigmentos"></div>
+      <p class="note" style="margin-top:10px">O <b>% por m²</b> é aplicado sobre a base de <b>4,5 kg/m²</b> (ex.: 6% = 0,270 kg = 270 g por m²). O <b>% branco</b> soma pigmento branco para clarear/escurecer o tom (padrão 0) — o custo do pigmento puxa as duas cores. Ajuste o preço do branco na última linha.</p></div>
     <div class="card"><div class="cfg-sec">Custos fixos</div><div class="cfg-grid" id="cfgFixos"></div>
       <div class="cfg-sec" style="margin-top:20px">Despesas administrativas mensais (R$)</div><div class="cfg-grid" id="cfgAdm"></div>
       <div class="cfg-grid" style="margin-top:14px"><div class="cfg-field"><label>Custo fixo por m² <span class="u">(calculado)</span></label><input id="admM2out" readonly></div></div></div>
@@ -321,7 +323,7 @@ const DEFAULT_CONFIG = {
   pigmentos:{ preto:25.1, verde:36.5, terracota:24.5, amarelo:44.67, branco:36.5, azul:38, cinza:32.4, laranja:38.9 },
   raspaPorEspessura:{ 15:{grossa:8.5,resina:9.0},20:{grossa:13.5,resina:13.5},25:{grossa:18,resina:18},30:{grossa:22.5,resina:22.5},40:{grossa:23.7,resina:23.7},50:{grossa:32.5,resina:32.5},60:{grossa:41.3,resina:41.3} },
   espessuras:[15,20,25,30,40,50,60],
-  cores:{ preto:{label:"Preto",sw:"#2B2B2B",receita:[]}, verde:{label:"Verde",sw:"#2E8B43",receita:[["verde",0.06]]}, terracota:{label:"Terracota",sw:"#B5533B",receita:[["terracota",0.06]]}, amarelo:{label:"Amarelo",sw:"#E8B23A",receita:[["branco",0.03],["amarelo",0.08]]}, azul:{label:"Azul",sw:"#2D6CB5",receita:[["azul",0.06]]}, cinza:{label:"Cinza",sw:"#7A8288",receita:[["cinza",0.06]]}, laranja:{label:"Laranja",sw:"#E07B2E",receita:[["branco",0.03],["laranja",0.08]]} },
+  cores:{ preto:{label:"Preto",sw:"#2B2B2B",pct:0,whitePct:0}, verde:{label:"Verde",sw:"#2E8B43",pct:0.06,whitePct:0}, terracota:{label:"Terracota",sw:"#B5533B",pct:0.06,whitePct:0}, amarelo:{label:"Amarelo",sw:"#E8B23A",pct:0.08,whitePct:0.03}, azul:{label:"Azul",sw:"#2D6CB5",pct:0.06,whitePct:0}, cinza:{label:"Cinza",sw:"#7A8288",pct:0.06,whitePct:0}, laranja:{label:"Laranja",sw:"#E07B2E",pct:0.08,whitePct:0.03} },
   fixos:{ maoObraM2:3.54, custoIndireto:96850, maquinas:8, m2PorMaquinaHora:10, horasMes:374 },
   adm:{ "Energia elétrica":25665.15,"Aluguel imóvel":10000,"IPTU":2279.28,"Telefone móvel":3554.8,"Telefone fixo":720.72,"Segurança galpão":7000,"Google empresa":2000,"Google crédito":4000,"Sistema Tiny":300,"Sistema TOTVS":1000,"Provedor":215.93,"Advogado":3000,"Contabilidade":6000,"Água":755.97 },
   taxas:{ imposto:0.15, comissao:0.05, desconto:0.05 },
@@ -339,11 +341,13 @@ const DEFAULT_CONFIG = {
 };
 let CONFIG = mergeConfig(DEFAULT_CONFIG, DB.read("config",{}));
 function mergeConfig(base, saved){ const c=JSON.parse(JSON.stringify(base)); for(const k in saved){ if(saved[k]&&typeof saved[k]==="object"&&!Array.isArray(saved[k])) c[k]=Object.assign(c[k]||{},saved[k]); else c[k]=saved[k]; } return c; }
+/* migração: configs antigos guardavam % em cores[cor].receita — deriva pct (cor) e whitePct (branco) */
+Object.keys(CONFIG.cores).forEach(k=>{ const c=CONFIG.cores[k]; if(c.pct==null && c.whitePct==null){ let own=0,wht=0; (c.receita||[]).forEach(([p,r])=>{ if(p==="branco") wht+=r; else own+=r; }); c.pct=own; c.whitePct=wht; } delete c.receita; });
 function saveConfig(){ DB.write("config", CONFIG); }
 
 /* ================================================================ MOTOR DE CUSTO ================================================================ */
 function custoAdmM2(){ const s=Object.values(CONFIG.adm).reduce((a,v)=>a+(+v||0),0)+(+CONFIG.fixos.custoIndireto||0); const cap=CONFIG.fixos.maquinas*CONFIG.fixos.m2PorMaquinaHora*CONFIG.fixos.horasMes; return cap>0?s/cap:0; }
-function pigKg(cor){ const o={}; (CONFIG.cores[cor]?.receita||[]).forEach(([p,r])=>o[p]=(o[p]||0)+CONFIG.superiorKg*r); return o; }
+function pigKg(cor){ const c=CONFIG.cores[cor]; if(!c) return {}; const o={}; const own=(c.pct||0)*CONFIG.superiorKg, wht=(c.whitePct||0)*CONFIG.superiorKg; if(own>0) o[cor]=(o[cor]||0)+own; if(wht>0) o.branco=(o.branco||0)+wht; return o; }
 function custoPigM2(cor){ return Object.entries(pigKg(cor)).reduce((s,[p,k])=>s+k*(CONFIG.pigmentos[p]||0),0); }
 function materialM2(cor,esp,adit){ const inf=CONFIG.raspaPorEspessura[esp]||{grossa:0,resina:0}; const g=inf.grossa; return { raspaFina:CONFIG.superiorKg, raspaGrossa:adit?g/2:g, aditivo:adit?g/2:0, resina:CONFIG.superiorKg*CONFIG.resinaRatio.superior+inf.resina*CONFIG.resinaRatio.inferior, pigmentos:pigKg(cor) }; }
 function custoProdM2(cor,esp,adit){ const m=materialM2(cor,esp,adit); return m.raspaFina*CONFIG.insumos.raspaFina+m.raspaGrossa*CONFIG.insumos.raspaGrossa+m.aditivo*CONFIG.insumos.aditivo+m.resina*CONFIG.insumos.resina+custoPigM2(cor)+CONFIG.fixos.maoObraM2+custoAdmM2(); }
@@ -360,7 +364,7 @@ const prodNome=id=>CONFIG.produtos.find(p=>p.id===id)?.nome||id;
 function itemM2Pecas(it){ const prod=CONFIG.produtos.find(p=>p.id===it.produto)||CONFIG.produtos[0]; let m2=0,pc=0; if(it.qtd>0){ if(it.base==="m2"){m2=it.qtd;pc=Math.floor(it.qtd*prod.pecasM2);} else {pc=it.qtd;m2=prod.pecasM2>0?it.qtd/prod.pecasM2:0;} } return {m2,pc,prod}; }
 
 /* ================================================================ PRECIFICAÇÃO / ORÇAMENTO ================================================================ */
-function precoVendaItem(it){ const {m2}=itemM2Pecas(it); const custo=custoProdM2(it.cor,+it.esp,it.aditivo)*m2; const venda=custo*(1+CONFIG.margemAlvo/100); return {m2,custo,venda}; }
+function precoVendaItem(it){ const {m2}=itemM2Pecas(it); const custo=custoProdM2(it.cor,espVal(it),it.aditivo)*m2; const venda=custo*(1+CONFIG.margemAlvo/100); return {m2,custo,venda}; }
 function calcOrcamento(itens, descontoPct, regime){
   let custo=0, vendaCheia=0;
   itens.forEach(it=>{ if(!(it.qtd>0))return; const p=precoVendaItem(it); custo+=p.custo; vendaCheia+=p.venda; });
@@ -400,7 +404,7 @@ $("logoutBtn").addEventListener("click",()=>{ SESSION=null; DB.write("session",n
 function isMaster(){ return SESSION?.papel==="master"; }
 
 /* ================================================================ NAVEGAÇÃO ================================================================ */
-const TABS_MASTER=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["producao","Produção"],["precos","Preços & Custos"],["config","Configurações"]];
+const TABS_MASTER=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["producao","PCP"],["precos","Preços & Custos"],["config","Configurações"]];
 const TABS_VEND=[["orcamentos","Orçamentos"],["pedidos","Pedidos"]];
 function buildTabs(){
   const tabs=isMaster()?TABS_MASTER:TABS_VEND;
@@ -430,8 +434,11 @@ function startApp(){
 let orcItens=[novoItem()], editandoId=null;
 function novoItem(){ return {produto:"ossinho",cor:"preto",esp:15,aditivo:false,base:"m2",qtd:null}; }
 function optP(s){ return CONFIG.produtos.map(p=>`<option value="${p.id}" ${p.id===s?"selected":""}>${p.nome}</option>`).join(""); }
-function optC(s){ return Object.entries(CONFIG.cores).map(([k,c])=>`<option value="${k}" ${k===s?"selected":""}>${c.label}</option>`).join(""); }
-function optE(s){ return CONFIG.espessuras.map(e=>`<option value="${e}" ${e==s?"selected":""}>${e} mm</option>`).join(""); }
+function optC(s){ return Object.entries(CONFIG.cores).map(([k,c])=>`<option value="${k}" ${k===s?"selected":""}>${c.label}</option>`).join("")+`<option value="outro" ${s==="outro"?"selected":""}>Outro…</option>`; }
+function optE(s){ return CONFIG.espessuras.map(e=>`<option value="${e}" ${e==s?"selected":""}>${e} mm</option>`).join("")+`<option value="outro" ${s==="outro"?"selected":""}>Outro…</option>`; }
+function espVal(it){ return it.esp==="outro" ? (parseFloat(String(it.espManual||"").replace(",","."))||0) : +it.esp; }
+function corLabelItem(it){ return it.cor==="outro" ? (it.corManual||"Personalizada") : (corLabel(it.cor)||it.cor); }
+function espLabelItem(it){ const v=it.esp==="outro" ? (it.espManual||"—") : it.esp; return v+" mm"; }
 
 function renderOrcRows(){
   const box=$("orcRows"); box.innerHTML="";
@@ -441,8 +448,8 @@ function renderOrcRows(){
     const row=document.createElement("div"); row.className="order-row";
     row.innerHTML=`
       <div class="cell" data-l="Produto"><select class="ctrl" data-i="${i}" data-k="produto">${optP(it.produto)}</select></div>
-      <div class="cell" data-l="Cor"><select class="ctrl" data-i="${i}" data-k="cor">${optC(it.cor)}</select></div>
-      <div class="cell" data-l="Espessura"><select class="ctrl" data-i="${i}" data-k="esp">${optE(it.esp)}</select></div>
+      <div class="cell" data-l="Cor"><select class="ctrl" data-i="${i}" data-k="cor">${optC(it.cor)}</select>${it.cor==="outro"?`<input class="ctrl" style="margin-top:6px" type="text" placeholder="Cor personalizada" value="${it.corManual||""}" data-i="${i}" data-k="corManual">`:""}</div>
+      <div class="cell" data-l="Espessura"><select class="ctrl" data-i="${i}" data-k="esp">${optE(it.esp)}</select>${it.esp==="outro"?`<input class="ctrl" style="margin-top:6px" type="number" step="any" min="0" placeholder="mm" value="${it.espManual??""}" data-i="${i}" data-k="espManual">`:""}</div>
       <div class="cell" data-l="Base"><select class="ctrl" data-i="${i}" data-k="base"><option value="m2" ${it.base==="m2"?"selected":""}>m²</option><option value="pc" ${it.base==="pc"?"selected":""}>Peças</option></select></div>
       <div class="cell" data-l="Qtd"><input class="ctrl" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${it.qtd??""}" data-i="${i}" data-k="qtd"></div>
       <div class="cell out venda" data-l="Valor">${saida}</div>
@@ -469,7 +476,10 @@ function renderOrcTotals(){
 }
 $("orcRows").addEventListener("input",e=>{ const t=e.target; if(t.dataset.i===undefined)return; const i=+t.dataset.i,k=t.dataset.k;
   if(k==="qtd"){ const v=parseFloat(t.value.replace(",",".")); orcItens[i].qtd=isNaN(v)?null:v; const p=precoVendaItem(orcItens[i]); t.closest(".order-row").querySelector(".venda").textContent=orcItens[i].qtd>0?money(p.venda):"—"; renderOrcTotals(); return; }
-  if(k==="esp") orcItens[i].esp=+t.value; else orcItens[i][k]=t.value; renderOrcRows();
+  if(k==="corManual"||k==="espManual"){ orcItens[i][k]=t.value; const p=precoVendaItem(orcItens[i]); t.closest(".order-row").querySelector(".venda").textContent=orcItens[i].qtd>0?money(p.venda):"—"; renderOrcTotals(); return; }
+  if(k==="esp") orcItens[i].esp = t.value==="outro" ? "outro" : +t.value;
+  else orcItens[i][k]=t.value;
+  renderOrcRows();
 });
 $("orcRows").addEventListener("click",e=>{ const b=e.target.closest("[data-del]"); if(!b)return; orcItens.splice(+b.dataset.del,1); if(!orcItens.length)orcItens=[novoItem()]; renderOrcRows(); });
 $("addRow").addEventListener("click",()=>{ orcItens.push(novoItem()); renderOrcRows(); });
@@ -545,7 +555,7 @@ function gerarPedido(o){
   peds.unshift({ id:Date.now(), numero:num, orcamentoId:o.id, orcNumero:o.numero, data:new Date().toISOString(), cliente:o.cliente, regime:o.regime, vendedorNome:o.vendedorNome, itens:JSON.parse(JSON.stringify(o.itens)), vendaFinal:o.vendaFinal, custo:o.custo, status:"em_producao" });
   DB.write("pedidos",peds);
   const lista=DB.read("orcamentos",[]); const oo=lista.find(x=>x.id===o.id); if(oo) oo.status="convertido"; DB.write("orcamentos",lista);
-  renderOrcList(); alert("Pedido Nº "+num+" gerado. Já aparece em Pedidos"+(isMaster()?" e Produção.":"."));
+  renderOrcList(); alert("Pedido Nº "+num+" gerado. Já aparece em Pedidos"+(isMaster()?" e no PCP.":"."));
 }
 
 /* ================================================================ PEDIDOS ================================================================ */
@@ -563,7 +573,7 @@ function renderPedidos(){
 }
 
 /* ================================================================ PRODUÇÃO (master) ================================================================ */
-function materialDoPedido(p){ let rf=0,rg=0,ad=0,res=0; const pig={}; p.itens.forEach(it=>{ const {m2}=itemM2Pecas(it); const m=materialM2(it.cor,+it.esp,it.aditivo); rf+=m.raspaFina*m2; rg+=m.raspaGrossa*m2; ad+=m.aditivo*m2; res+=m.resina*m2; Object.entries(m.pigmentos).forEach(([k,v])=>pig[k]=(pig[k]||0)+v*m2); }); return {rf,rg,ad,res,pig}; }
+function materialDoPedido(p){ let rf=0,rg=0,ad=0,res=0; const pig={}; p.itens.forEach(it=>{ const {m2}=itemM2Pecas(it); const m=materialM2(it.cor,espVal(it),it.aditivo); rf+=m.raspaFina*m2; rg+=m.raspaGrossa*m2; ad+=m.aditivo*m2; res+=m.resina*m2; Object.entries(m.pigmentos).forEach(([k,v])=>pig[k]=(pig[k]||0)+v*m2); }); return {rf,rg,ad,res,pig}; }
 function matListHTML(m){
   let h=`<div class="mat-list">
     <div class="mat-item"><span class="dot" style="background:var(--raspa-f)"></span><span class="nm">Raspa fina</span><span class="kg">${nf(m.rf,1)}<span class="u">kg</span></span></div>
@@ -579,7 +589,7 @@ function renderProducao(){
   const tot={rf:0,rg:0,ad:0,res:0,pig:{}};
   peds.forEach(p=>{ const m=materialDoPedido(p); tot.rf+=m.rf; tot.rg+=m.rg; tot.ad+=m.ad; tot.res+=m.res; Object.entries(m.pig).forEach(([k,v])=>tot.pig[k]=(tot.pig[k]||0)+v); });
   $("prodTotal").innerHTML=matListHTML(tot);
-  $("prodList").innerHTML=peds.map(p=>{ const m=materialDoPedido(p); const itens=p.itens.map(it=>{const {m2,pc}=itemM2Pecas(it); return `${prodNome(it.produto)} ${corLabel(it.cor)} ${it.esp}mm — ${it.base==="m2"?nf(m2,2)+" m²":nf(pc)+" pç"}`;}).join("<br>");
+  $("prodList").innerHTML=peds.map(p=>{ const m=materialDoPedido(p); const itens=p.itens.map(it=>{const {m2,pc}=itemM2Pecas(it); return `${prodNome(it.produto)} ${corLabelItem(it)} ${espLabelItem(it)} — ${it.base==="m2"?nf(m2,2)+" m²":nf(pc)+" pç"}`;}).join("<br>");
     return `<div class="row-item" style="align-items:flex-start"><div class="info"><div class="ti">Pedido Nº ${p.numero} · ${p.cliente.nome}</div><div class="meta" style="margin-top:6px;line-height:1.7">${itens}</div></div><div style="min-width:220px">${matListHTML(m)}</div></div>`;
   }).join("");
 }
@@ -588,7 +598,7 @@ function renderProducao(){
 function exportarPDF(o){
   const dataStr=new Date(o.data).toLocaleDateString("pt-BR");
   const val=new Date(Date.now()+7*864e5).toLocaleDateString("pt-BR");
-  const linhas=o.itens.map(it=>{ const {m2,pc}=itemM2Pecas(it); const p=precoVendaItem(it); const q=it.base==="m2"?nf(m2,2)+" m²":nf(pc)+" pç"; return `<tr><td>${prodNome(it.produto)}</td><td>${corLabel(it.cor)}</td><td>${it.esp} mm</td><td style="text-align:right">${q}</td><td style="text-align:right">${money(p.venda)}</td></tr>`; }).join("");
+  const linhas=o.itens.map(it=>{ const {m2,pc}=itemM2Pecas(it); const p=precoVendaItem(it); const q=it.base==="m2"?nf(m2,2)+" m²":nf(pc)+" pç"; return `<tr><td>${prodNome(it.produto)}</td><td>${corLabelItem(it)}</td><td>${espLabelItem(it)}</td><td style="text-align:right">${q}</td><td style="text-align:right">${money(p.venda)}</td></tr>`; }).join("");
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Orçamento Nº ${o.numero} — KASFLOOR</title>
   <style>
     body{font-family:'Manrope',Arial,sans-serif;color:#16241A;max-width:760px;margin:0 auto;padding:36px}
@@ -651,6 +661,31 @@ const centsToBR=c=>"R$ "+new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,
 function moneyInput(init,on){ const i=document.createElement("input"); i.type="text"; i.inputMode="numeric"; let c=Math.round((init||0)*100); i.value=centsToBR(c); i.addEventListener("input",()=>{ const d=i.value.replace(/\D/g,""); c=d?parseInt(d,10):0; i.value=centsToBR(c); on(c/100); }); return i; }
 function numInput(init,on){ const i=document.createElement("input"); i.type="number"; i.step="any"; i.inputMode="decimal"; i.value=init; i.addEventListener("input",()=>{ const v=parseFloat(i.value.replace(",",".")); on(isNaN(v)?0:v); }); return i; }
 function field(l,u,inp){ const w=document.createElement("div"); w.className="cfg-field"; w.innerHTML=`<label>${l} <span class="u">${u||""}</span></label>`; w.appendChild(inp); return w; }
+const cellInputCss="width:96px;text-align:right;font-family:var(--display);border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)";
+function renderPigmentos(){
+  const wrap=$("cfgPigmentos"); wrap.innerHTML="";
+  const tbl=document.createElement("table"); tbl.className="grid"; tbl.style.width="100%";
+  tbl.innerHTML="<thead><tr><th>Cor</th><th style='text-align:right'>Preço (R$/kg)</th><th style='text-align:right'>% por m²</th><th style='text-align:right'>% branco (tom)</th><th style='text-align:right'>Pigmento / m²</th></tr></thead>";
+  const tb=document.createElement("tbody");
+  Object.keys(CONFIG.cores).forEach(k=>{
+    const c=CONFIG.cores[k], tr=document.createElement("tr");
+    const tdN=document.createElement("td"); tdN.innerHTML=`<span class="swatch" style="background:${c.sw}"></span>${c.label}`;
+    const tdP=document.createElement("td"); tdP.style.textAlign="right"; const mi=moneyInput(CONFIG.pigmentos[k]||0,v=>{CONFIG.pigmentos[k]=v;saveConfig();renderPigmentos();}); mi.style.cssText=cellInputCss; tdP.appendChild(mi);
+    const tdPct=document.createElement("td"); tdPct.style.textAlign="right"; const ni=numInput((c.pct||0)*100,v=>{c.pct=v/100;saveConfig();renderPigmentos();}); ni.style.cssText=cellInputCss; tdPct.appendChild(ni);
+    const tdW=document.createElement("td"); tdW.style.textAlign="right"; const wi=numInput((c.whitePct||0)*100,v=>{c.whitePct=v/100;saveConfig();renderPigmentos();}); wi.style.cssText=cellInputCss; tdW.appendChild(wi);
+    const kg=(c.pct||0)*CONFIG.superiorKg+(c.whitePct||0)*CONFIG.superiorKg;
+    const tdKg=document.createElement("td"); tdKg.style.textAlign="right"; tdKg.innerHTML=`<span style="font-family:var(--display)">${nf(kg,3)} kg</span><br><small style="color:var(--ink-2)">${money(custoPigM2(k))}/m²</small>`;
+    tr.append(tdN,tdP,tdPct,tdW,tdKg); tb.appendChild(tr);
+  });
+  const trB=document.createElement("tr"); trB.style.background="var(--surface-2)";
+  const b1=document.createElement("td"); b1.innerHTML=`<span class="swatch" style="background:#E3DFD3;box-shadow:inset 0 0 0 1px #C9C2AF"></span>Branco <small style="color:var(--ink-2)">(aditivo de tom)</small>`;
+  const b2=document.createElement("td"); b2.style.textAlign="right"; const bmi=moneyInput(CONFIG.pigmentos.branco||0,v=>{CONFIG.pigmentos.branco=v;saveConfig();renderPigmentos();}); bmi.style.cssText=cellInputCss; b2.appendChild(bmi);
+  const b3=document.createElement("td"); b3.style.cssText="text-align:right;color:var(--ink-2)"; b3.textContent="—";
+  const b4=document.createElement("td"); b4.style.cssText="text-align:right;color:var(--ink-2)"; b4.textContent="—";
+  const b5=document.createElement("td"); b5.style.cssText="text-align:right;color:var(--ink-2)"; b5.textContent="—";
+  trB.append(b1,b2,b3,b4,b5); tb.appendChild(trB);
+  tbl.appendChild(tb); wrap.appendChild(tbl);
+}
 
 function renderConfig(){
   const cm=$("cfgMargens"); cm.innerHTML="";
@@ -662,8 +697,7 @@ function renderConfig(){
     field("Raspa grossa","R$/kg",moneyInput(CONFIG.insumos.raspaGrossa,v=>{CONFIG.insumos.raspaGrossa=v;saveConfig();})),
     field("Aditivo","R$/kg",moneyInput(CONFIG.insumos.aditivo,v=>{CONFIG.insumos.aditivo=v;saveConfig();})),
     field("Resina","R$/kg",moneyInput(CONFIG.insumos.resina,v=>{CONFIG.insumos.resina=v;saveConfig();})));
-  const cp=$("cfgPigmentos"); cp.innerHTML="";
-  Object.keys(CONFIG.pigmentos).forEach(p=>cp.append(field(pigLabel(p),"R$/kg",moneyInput(CONFIG.pigmentos[p],v=>{CONFIG.pigmentos[p]=v;saveConfig();}))));
+  renderPigmentos();
   const cf=$("cfgFixos"); cf.innerHTML="";
   cf.append(field("Mão de obra direta","R$/m²",moneyInput(CONFIG.fixos.maoObraM2,v=>{CONFIG.fixos.maoObraM2=v;saveConfig();updateAdm();})),
     field("Custo indireto (folha)","R$/mês",moneyInput(CONFIG.fixos.custoIndireto,v=>{CONFIG.fixos.custoIndireto=v;saveConfig();updateAdm();})),
