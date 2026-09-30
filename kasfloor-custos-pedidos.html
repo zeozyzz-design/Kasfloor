@@ -156,6 +156,27 @@
   table.grid td small{ display:block; font-size:11px; color:var(--ink-dim); font-weight:600; }
   .scroll{ overflow-x:auto; }
   .swatch{ width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; margin-right:5px; }
+  .adit-toggle{ display:inline-flex; align-items:center; gap:7px; margin-top:10px; font-size:12.5px; color:var(--aditivo); font-weight:700; cursor:pointer; background:#E7F5F3; border:1px solid #BEE3DE; border-radius:8px; padding:6px 10px; }
+  .adit-toggle input{ width:15px; height:15px; accent-color:var(--aditivo); }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  @media (max-width:900px){ .kpi-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:520px){ .kpi-grid{ grid-template-columns:1fr; } }
+  .kpi{ background:var(--surface-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .kpi .lab{ font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-dim); font-weight:700; }
+  .kpi .val{ font-family:var(--display); font-size:23px; font-weight:700; color:var(--ink); margin-top:4px; }
+  .kpi .sub{ font-size:11.5px; color:var(--ink-2); margin-top:3px; }
+  .kpi .sub.pos{ color:var(--pos); } .kpi .sub.neg{ color:var(--neg); }
+  .chart-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:820px){ .chart-grid{ grid-template-columns:1fr; } }
+  .chart-card{ border:1px solid var(--line); border-radius:12px; padding:14px 14px 8px; background:var(--surface); }
+  .chart-card h3{ font-family:var(--display); font-size:14px; margin:0 0 4px; color:var(--ink); }
+  .chart-card .leg{ font-size:11px; color:var(--ink-dim); margin:0 0 6px; }
+  .chart-card svg{ width:100%; height:auto; display:block; }
+  .hbar-row{ display:grid; grid-template-columns:120px 1fr auto; align-items:center; gap:10px; margin-bottom:8px; font-size:12.5px; }
+  .hbar-track{ background:var(--surface-2); border-radius:6px; height:18px; overflow:hidden; }
+  .hbar-fill{ height:100%; border-radius:6px; background:var(--brand); }
+  .hbar-val{ font-family:var(--display); font-weight:700; color:var(--ink); }
 
   .cfg-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 22px; }
   @media (max-width:640px){ .cfg-grid{ grid-template-columns:1fr; } }
@@ -270,6 +291,16 @@
     <div class="card"><h2>Por pedido</h2><div id="prodList"></div></div>
   </section>
 
+  <!-- TABELA DE PREÇOS (vendas + master) -->
+  <section class="view" id="view-tabela">
+    <div class="card">
+      <div class="card-head"><div><h2>Tabela de Preços</h2><p class="desc" style="margin-bottom:0">Preço de venda por cor e espessura — <span id="tabProdName"></span>.</p></div>
+        <select class="ctrl" id="tabProduto" style="max-width:240px"></select></div>
+      <div class="scroll"><table class="grid" id="tblTabela"></table></div>
+      <p class="note" id="tabNote" style="margin-top:10px"></p>
+    </div>
+  </section>
+
   <!-- PREÇOS & CUSTOS (master) -->
   <section class="view" id="view-precos">
     <div class="card">
@@ -280,10 +311,24 @@
     <div class="card"><h2>Custo e lucro por cor × espessura (R$/m²)</h2><p class="desc">Custo de produção (cinza) e lucro (verde/vermelho).</p><div class="scroll"><table class="grid" id="tblCusto"></table></div></div>
   </section>
 
+  <!-- RELATÓRIOS (master) -->
+  <section class="view" id="view-relatorios">
+    <div class="card">
+      <div class="card-head"><div><h2>Painel gerencial</h2><p class="desc" style="margin-bottom:0">Vendas, produção, custos e margem — pedidos gerados.</p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost sm" id="btnRelPDF">Exportar PDF</button><button class="btn ghost sm" id="btnRelXls">Exportar Excel</button></div></div>
+      <div class="kpi-grid" id="relKpis"></div>
+    </div>
+    <div class="card"><h2>Evolução mensal</h2><p class="desc">Rótulo de dados, linha de tendência (tracejado laranja) e meta (tracejado vermelho).</p><div class="chart-grid" id="relCharts"></div></div>
+    <div class="card"><h2>Faturamento por produto e vendedor</h2><div class="chart-grid" id="relBreak"></div></div>
+    <div class="card"><h2>Necessidade de produção (pedidos em aberto)</h2><div id="relProd"></div></div>
+  </section>
+
   <!-- CONFIGURAÇÕES (master) -->
   <section class="view" id="view-config">
     <div class="note warn"><b>Margem de trabalho.</b> A margem alvo forma o preço de venda. Se o desconto do vendedor derrubar a margem abaixo da mínima, o orçamento fica <b>Aguardando aprovação</b> — só você libera.</div>
     <div class="card"><div class="cfg-sec">Margens de venda</div><div class="cfg-grid" id="cfgMargens"></div></div>
+    <div class="card"><div class="cfg-sec">Metas mensais (Relatórios)</div><div class="cfg-grid" id="cfgMetas"></div>
+      <p class="note" style="margin-top:10px">Definem as linhas de meta nos gráficos do painel gerencial.</p></div>
     <div class="card"><div class="cfg-sec">Usuários</div><div id="usersList"></div>
       <div class="cfg-grid" style="margin-top:14px">
         <div class="cfg-field"><label>Nome</label><input id="newUserNome" type="text" style="font-family:var(--ui)"></div>
@@ -342,6 +387,7 @@ const DEFAULT_CONFIG = {
     street:{preto:{30:167.2,40:183.7,50:214.5},verde:{30:177.1,40:194.7,50:214.17},terracota:{30:173.8,40:190.3,50:209},amarelo:{30:196.9,40:216.59,50:236.5},azul:{30:170.5,40:187.55,50:205.7},cinza:{30:177.1,40:194.7,50:214.17},laranja:{30:206.9,40:226.59,50:246.5}}, rampa:{}
   },
   margemAlvo:50, margemMinima:35,
+  metas:{ faturamento:100000, margem:35, volume:1000, pedidos:20 },
 };
 let CONFIG = mergeConfig(DEFAULT_CONFIG, DB.read("config",{}));
 function mergeConfig(base, saved){ const c=JSON.parse(JSON.stringify(base)); for(const k in saved){ if(saved[k]&&typeof saved[k]==="object"&&!Array.isArray(saved[k])) c[k]=Object.assign(c[k]||{},saved[k]); else c[k]=saved[k]; } return c; }
@@ -408,8 +454,8 @@ $("logoutBtn").addEventListener("click",()=>{ SESSION=null; DB.write("session",n
 function isMaster(){ return SESSION?.papel==="master"; }
 
 /* ================================================================ NAVEGAÇÃO ================================================================ */
-const TABS_MASTER=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["producao","PCP"],["precos","Preços & Custos"],["config","Configurações"]];
-const TABS_VEND=[["orcamentos","Orçamentos"],["pedidos","Pedidos"]];
+const TABS_MASTER=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["producao","PCP"],["tabela","Tabela de Preços"],["precos","Preços & Custos"],["relatorios","Relatórios"],["config","Configurações"]];
+const TABS_VEND=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["tabela","Tabela de Preços"]];
 function buildTabs(){
   const tabs=isMaster()?TABS_MASTER:TABS_VEND;
   $("tabs").innerHTML=tabs.map((t,i)=>`<button data-tab="${t[0]}" class="${i===0?"active":""}">${t[1]}</button>`).join("");
@@ -421,7 +467,9 @@ function showTab(tab){
   if(tab==="orcamentos") renderOrcList();
   if(tab==="pedidos") renderPedidos();
   if(tab==="producao") renderProducao();
+  if(tab==="tabela") renderTabela();
   if(tab==="precos") renderPrecos();
+  if(tab==="relatorios") renderRelatorios();
   if(tab==="config") renderConfig();
 }
 
@@ -577,7 +625,7 @@ function renderPedidos(){
 }
 
 /* ================================================================ PRODUÇÃO (master) ================================================================ */
-function materialDoPedido(p){ let rf=0,rg=0,ad=0,res=0; const pig={}; p.itens.forEach(it=>{ const {m2}=itemM2Pecas(it); const m=materialM2(it.cor,espVal(it),it.aditivo); rf+=m.raspaFina*m2; rg+=m.raspaGrossa*m2; ad+=m.aditivo*m2; res+=m.resina*m2; Object.entries(m.pigmentos).forEach(([k,v])=>pig[k]=(pig[k]||0)+v*m2); }); return {rf,rg,ad,res,pig}; }
+function materialDoPedido(p){ let rf=0,rg=0,ad=0,res=0; const pig={}; p.itens.forEach(it=>{ const {m2}=itemM2Pecas(it); const m=materialM2(it.cor,espVal(it), p.aditivo || it.aditivo); rf+=m.raspaFina*m2; rg+=m.raspaGrossa*m2; ad+=m.aditivo*m2; res+=m.resina*m2; Object.entries(m.pigmentos).forEach(([k,v])=>pig[k]=(pig[k]||0)+v*m2); }); return {rf,rg,ad,res,pig}; }
 function matListHTML(m){
   let h=`<div class="mat-list">
     <div class="mat-item"><span class="dot" style="background:var(--raspa-f)"></span><span class="nm">Raspa fina</span><span class="kg">${nf(m.rf,1)}<span class="u">kg</span></span></div>
@@ -594,9 +642,12 @@ function renderProducao(){
   peds.forEach(p=>{ const m=materialDoPedido(p); tot.rf+=m.rf; tot.rg+=m.rg; tot.ad+=m.ad; tot.res+=m.res; Object.entries(m.pig).forEach(([k,v])=>tot.pig[k]=(tot.pig[k]||0)+v); });
   $("prodTotal").innerHTML=matListHTML(tot);
   $("prodList").innerHTML=peds.map(p=>{ const m=materialDoPedido(p); const itens=p.itens.map(it=>{const {m2,pc}=itemM2Pecas(it); return `${prodNome(it.produto)} ${corLabelItem(it)} ${espLabelItem(it)} — ${it.base==="m2"?nf(m2,2)+" m²":nf(pc)+" pç"}`;}).join("<br>");
-    return `<div class="row-item" style="align-items:flex-start"><div class="info"><div class="ti">Pedido Nº ${p.numero} · ${p.cliente.nome}</div><div class="meta" style="margin-top:6px;line-height:1.7">${itens}</div></div><div style="min-width:220px">${matListHTML(m)}</div></div>`;
+    return `<div class="row-item" style="align-items:flex-start"><div class="info"><div class="ti">Pedido Nº ${p.numero} · ${p.cliente.nome}</div><div class="meta" style="margin-top:6px;line-height:1.7">${itens}</div>
+      <label class="adit-toggle"><input type="checkbox" data-aditivo="${p.id}" ${p.aditivo?"checked":""}> Usar aditivo (divide a raspa grossa 50/50)</label></div>
+      <div style="min-width:220px">${matListHTML(m)}</div></div>`;
   }).join("");
 }
+$("prodList").addEventListener("change",e=>{ const c=e.target.closest("[data-aditivo]"); if(!c)return; const peds=DB.read("pedidos",[]); const p=peds.find(x=>x.id==c.dataset.aditivo); if(p){ p.aditivo=c.checked; DB.write("pedidos",peds); renderProducao(); } });
 
 /* ================================================================ EXPORTAR PDF (impressão) ================================================================ */
 function exportarPDF(o){
@@ -721,6 +772,11 @@ function renderConfig(){
   const cm=$("cfgMargens"); cm.innerHTML="";
   cm.append(field("Margem alvo","% sobre o custo",numInput(CONFIG.margemAlvo,v=>{CONFIG.margemAlvo=v;saveConfig();renderOrcTotals();renderOrcRows();})),
             field("Margem mínima","% (trava)",numInput(CONFIG.margemMinima,v=>{CONFIG.margemMinima=v;saveConfig();renderOrcTotals();})));
+  const cMe=$("cfgMetas"); cMe.innerHTML="";
+  cMe.append(field("Meta faturamento","R$/mês",moneyInput(CONFIG.metas.faturamento,v=>{CONFIG.metas.faturamento=v;saveConfig();})),
+    field("Meta margem","%/mês",numInput(CONFIG.metas.margem,v=>{CONFIG.metas.margem=v;saveConfig();})),
+    field("Meta volume","m²/mês",numInput(CONFIG.metas.volume,v=>{CONFIG.metas.volume=v;saveConfig();})),
+    field("Meta pedidos","un/mês",numInput(CONFIG.metas.pedidos,v=>{CONFIG.metas.pedidos=v;saveConfig();})));
   renderUsers();
   const ci=$("cfgInsumos"); ci.innerHTML="";
   ci.append(field("Raspa fina","R$/kg",moneyInput(CONFIG.insumos.raspaFina,v=>{CONFIG.insumos.raspaFina=v;saveConfig();})),
@@ -768,6 +824,137 @@ $("addUserBtn").addEventListener("click",()=>{
   $("newUserNome").value="";$("newUserLogin").value="";$("newUserPass").value="";
   renderUsers();
 });
+
+/* ================================================================ TABELA DE PREÇOS (vendas / master) ================================================================ */
+function renderTabela(){
+  const sel=$("tabProduto");
+  if(!sel.options.length) sel.innerHTML=CONFIG.produtos.map(p=>`<option value="${p.id}">${p.nome}</option>`).join("");
+  const prod=sel.value||CONFIG.produtos[0].id, master=isMaster();
+  let h=`<thead><tr><th>Cor</th>${CONFIG.espessuras.map(e=>`<th>${e} mm</th>`).join("")}</tr></thead><tbody>`;
+  Object.keys(CONFIG.cores).forEach(c=>{
+    h+=`<tr><td><span class="swatch" style="background:${CONFIG.cores[c].sw}"></span>${CONFIG.cores[c].label}</td>`;
+    CONFIG.espessuras.forEach(e=>{ const v=CONFIG.precoVenda[prod]?.[c]?.[e]||0;
+      if(master) h+=`<td><input class="tab-preco" data-c="${c}" data-e="${e}" type="text" inputmode="numeric" value="${v?centsToBR(Math.round(v*100)):''}" placeholder="—" style="width:106px;text-align:right;font-family:var(--display);border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface-2)"></td>`;
+      else h+=`<td style="text-align:right;font-family:var(--display);font-weight:600">${v>0?money(v):'<span style="color:var(--ink-dim)">—</span>'}</td>`; });
+    h+=`</tr>`; });
+  $("tblTabela").innerHTML=h+`</tbody>`;
+  $("tabProdName").textContent=prodNome(prod);
+  $("tabNote").innerHTML=master?"Edite os preços de venda (R$/m²) — salvam automaticamente e valem para o comparativo e para a consulta dos vendedores.":"Valores de referência de venda (R$/m²). Consulte o Master para ajustes.";
+}
+$("tabProduto").addEventListener("change",renderTabela);
+$("tblTabela").addEventListener("input",e=>{ const t=e.target; if(!t.classList.contains("tab-preco"))return;
+  const prod=$("tabProduto").value,c=t.dataset.c,ee=t.dataset.e; const d=t.value.replace(/\D/g,""),cents=d?parseInt(d,10):0; t.value=cents?centsToBR(cents):"";
+  CONFIG.precoVenda[prod]=CONFIG.precoVenda[prod]||{}; CONFIG.precoVenda[prod][c]=CONFIG.precoVenda[prod][c]||{}; CONFIG.precoVenda[prod][c][ee]=cents/100; saveConfig(); });
+
+/* ================================================================ RELATÓRIOS — AGREGAÇÃO ================================================================ */
+const MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+function mesLabel(ym){ const [y,m]=ym.split("-"); return MESES[+m-1]+"/"+y.slice(2); }
+function pedidoVolume(p){ let v=0; p.itens.forEach(it=>v+=itemM2Pecas(it).m2); return v; }
+function agregadoMensal(){
+  const peds=DB.read("pedidos",[]),map={};
+  peds.forEach(p=>{ const ym=(p.data||"").slice(0,7); if(!ym)return; const a=map[ym]||(map[ym]={fat:0,custo:0,vol:0,ped:0}); a.fat+=p.vendaFinal||0; a.custo+=p.custo||0; a.vol+=pedidoVolume(p); a.ped+=1; });
+  let keys=Object.keys(map).sort();
+  if(!keys.length){ const now=new Date().toISOString().slice(0,7); map[now]={fat:0,custo:0,vol:0,ped:0}; keys=[now]; }
+  return keys.map(k=>({ym:k,...map[k],margem:map[k].custo>0?(map[k].fat-map[k].custo)/map[k].custo*100:0}));
+}
+function resumoGeral(){ const peds=DB.read("pedidos",[]); let fat=0,custo=0,vol=0; peds.forEach(p=>{fat+=p.vendaFinal||0;custo+=p.custo||0;vol+=pedidoVolume(p);}); const ped=peds.length,lucro=fat-custo; return {fat,custo,lucro,vol,ped,margem:custo>0?lucro/custo*100:0,ticket:ped>0?fat/ped:0}; }
+function fatPorProduto(){ const peds=DB.read("pedidos",[]),m={}; peds.forEach(p=>{ let cheia=0; const parts=p.itens.map(it=>{const vv=precoVendaItem(it).venda; cheia+=vv; return [it.produto,vv];}); const ratio=cheia>0?(p.vendaFinal||0)/cheia:0; parts.forEach(([pid,vv])=>m[pid]=(m[pid]||0)+vv*ratio); }); return Object.entries(m).map(([k,v])=>[prodNome(k),v]).sort((a,b)=>b[1]-a[1]); }
+function fatPorVendedor(){ const peds=DB.read("pedidos",[]),m={}; peds.forEach(p=>{ const nm=p.vendedorNome||"—"; m[nm]=(m[nm]||0)+(p.vendaFinal||0); }); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+
+/* ================================================================ RELATÓRIOS — GRÁFICOS SVG ================================================================ */
+function linReg(vals){ const n=vals.length; if(n<2)return null; let sx=0,sy=0,sxy=0,sxx=0; vals.forEach((y,i)=>{sx+=i;sy+=y;sxy+=i*y;sxx+=i*i;}); const d=n*sxx-sx*sx; if(d===0)return null; return {m:(n*sxy-sx*sy)/d,b:(sy-((n*sxy-sx*sy)/d)*sx)/n}; }
+function chartSVG(cfg){
+  const {type,labels,values,meta,fmt}=cfg, color=cfg.color||"var(--brand)";
+  const W=520,H=250,L=54,R=20,T=22,B=34,x0=L,x1=W-R,y0=T,y1=H-B,pw=x1-x0,ph=y1-y0,n=values.length||1;
+  let maxV=Math.max(...values,meta||0,0); if(!(maxV>0))maxV=1; const top=maxV*1.18, yF=v=>y1-(v/top)*ph, band=pw/n, bw=Math.min(band*0.6,52);
+  let g="";
+  for(let i=0;i<=4;i++){ const gy=y1-(i/4)*ph,gv=top*i/4; g+=`<line x1="${x0}" y1="${gy.toFixed(1)}" x2="${x1}" y2="${gy.toFixed(1)}" stroke="var(--line)" stroke-width="1"/><text x="${x0-6}" y="${(gy+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--ink-dim)">${fmt(gv,true)}</text>`; }
+  if(type==="bar"){ values.forEach((v,i)=>{ const cx=x0+band*(i+0.5),by=yF(v),bh=y1-by; g+=`<rect x="${(cx-bw/2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,bh).toFixed(1)}" rx="4" fill="${color}"/><text x="${cx.toFixed(1)}" y="${(by-5).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--ink)">${fmt(v)}</text>`; }); }
+  else { const pts=values.map((v,i)=>`${(x0+band*(i+0.5)).toFixed(1)},${yF(v).toFixed(1)}`).join(" "); g+=`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>`; values.forEach((v,i)=>{ const cx=x0+band*(i+0.5),cy=yF(v); g+=`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.6" fill="${color}"/><text x="${cx.toFixed(1)}" y="${(cy-7).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--ink)">${fmt(v)}</text>`; }); }
+  const rg=linReg(values); if(rg){ const xa=x0+band*0.5,xb=x0+band*(n-0.5),ya=yF(rg.b),yb=yF(rg.m*(n-1)+rg.b); g+=`<line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xb.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="var(--pig)" stroke-width="2" stroke-dasharray="5 4"/>`; }
+  if(meta!=null&&meta>0){ const my=yF(meta); g+=`<line x1="${x0}" y1="${my.toFixed(1)}" x2="${x1}" y2="${my.toFixed(1)}" stroke="var(--neg)" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${x1}" y="${(my-4).toFixed(1)}" text-anchor="end" font-size="9" font-weight="700" fill="var(--neg)">Meta ${(cfg.metaFmt||fmt)(meta)}</text>`; }
+  labels.forEach((lb,i)=>{ const cx=x0+band*(i+0.5); g+=`<text x="${cx.toFixed(1)}" y="${(y1+14).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="var(--ink-2)">${lb}</text>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" font-family="var(--ui)">${g}</svg>`;
+}
+function hbars(pairs){ if(!pairs.length)return `<div class="empty">Sem dados.</div>`; const max=Math.max(...pairs.map(p=>p[1]),1); return pairs.map(([l,v])=>`<div class="hbar-row"><span style="color:var(--ink-2)">${l}</span><span class="hbar-track"><span class="hbar-fill" style="width:${Math.max(2,v/max*100).toFixed(1)}%"></span></span><span class="hbar-val">${money(v,0)}</span></div>`).join(""); }
+
+/* ================================================================ RELATÓRIOS — RENDER ================================================================ */
+function renderRelatorios(){
+  const r=resumoGeral(),M=agregadoMensal(),metas=CONFIG.metas;
+  $("relKpis").innerHTML=[
+    ["Faturamento",money(r.fat,0),`${r.ped} pedidos`,""],
+    ["Custo de produção",money(r.custo,0),"acumulado",""],
+    ["Lucro",money(r.lucro,0),`margem ${nf(r.margem,1)}%`,r.lucro>=0?"pos":"neg"],
+    ["Margem média",nf(r.margem,1)+"%",`meta ${nf(metas.margem,1)}%`,r.margem>=metas.margem?"pos":"neg"],
+    ["Volume",nf(r.vol,0)+" m²","produzido/vendido",""],
+    ["Ticket médio",money(r.ticket,0),"por pedido",""],
+    ["Pedidos",nf(r.ped,0),`meta ${nf(metas.pedidos,0)}/mês`,""],
+    ["Impostos+enc. (est.)",money(r.fat*taxaVenda(),0),"sobre a venda",""],
+  ].map(k=>`<div class="kpi"><div class="lab">${k[0]}</div><div class="val">${k[1]}</div><div class="sub ${k[3]}">${k[2]}</div></div>`).join("");
+  const labels=M.map(x=>mesLabel(x.ym));
+  const shortR=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1).replace(".",",")+"k":nf(v,0);
+  const fR=(v,ax)=>ax?"R$ "+shortR(v):money(v,0), fV=(v,ax)=>ax?nf(v,0):nf(v,0)+" m²", fP=(v)=>nf(v,0), fM=(v)=>nf(v,1)+"%";
+  $("relCharts").innerHTML=[
+    ["Faturamento (R$)","barras · meta e tendência",chartSVG({type:"bar",labels,values:M.map(x=>x.fat),meta:metas.faturamento,color:"var(--brand)",fmt:fR})],
+    ["Margem (%)","linha · meta e tendência",chartSVG({type:"line",labels,values:M.map(x=>x.margem),meta:metas.margem,color:"var(--raspa-f)",fmt:fM})],
+    ["Volume (m²)","barras · meta e tendência",chartSVG({type:"bar",labels,values:M.map(x=>x.vol),meta:metas.volume,color:"var(--resina)",fmt:fV})],
+    ["Nº de pedidos","barras · meta e tendência",chartSVG({type:"bar",labels,values:M.map(x=>x.ped),meta:metas.pedidos,color:"var(--pig)",fmt:fP})],
+  ].map(c=>`<div class="chart-card"><h3>${c[0]}</h3><p class="leg">${c[1]}</p>${c[2]}</div>`).join("");
+  $("relBreak").innerHTML=`<div class="chart-card"><h3>Por produto</h3>${hbars(fatPorProduto())}</div><div class="chart-card"><h3>Por vendedor</h3>${hbars(fatPorVendedor())}</div>`;
+  const peds=DB.read("pedidos",[]).filter(p=>p.status==="em_producao");
+  if(!peds.length) $("relProd").innerHTML=`<div class="empty">Nenhum pedido em produção.</div>`;
+  else { const tot={rf:0,rg:0,ad:0,res:0,pig:{}}; peds.forEach(p=>{const m=materialDoPedido(p);tot.rf+=m.rf;tot.rg+=m.rg;tot.ad+=m.ad;tot.res+=m.res;Object.entries(m.pig).forEach(([k,v])=>tot.pig[k]=(tot.pig[k]||0)+v);}); $("relProd").innerHTML=matListHTML(tot); }
+}
+
+/* ================================================================ RELATÓRIOS — EXPORTAÇÃO ================================================================ */
+function exportRelPDF(){
+  renderRelatorios();
+  const css=`:root{--brand:#2E8B43;--brand-deep:#1E6B30;--ink:#16241A;--ink-2:#46584A;--ink-dim:#7C8C7E;--line:#E1E8DD;--surface:#fff;--surface-2:#F5F8F2;--pos:#1E7A34;--neg:#C0392B;--pig:#EF9A2E;--raspa-f:#2D7DD2;--resina:#8A5CD1;--aditivo:#159A8C;--raspa-g:#3A4750;--ui:Arial,sans-serif}
+    body{font-family:Arial,sans-serif;color:#16241A;padding:24px;max-width:920px;margin:0 auto}
+    h1{color:#1E6B30;font-size:22px;border-bottom:3px solid #2E8B43;padding-bottom:10px;margin:0 0 4px}
+    h2{font-size:15px;margin:22px 0 8px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .kpi{background:#F5F8F2;border:1px solid #E1E8DD;border-radius:10px;padding:10px 12px}
+    .kpi .lab{font-size:10px;text-transform:uppercase;color:#7C8C7E;font-weight:700}
+    .kpi .val{font-size:18px;font-weight:700;margin-top:3px}
+    .kpi .sub{font-size:10px;color:#46584A}.kpi .sub.pos{color:#1E7A34}.kpi .sub.neg{color:#C0392B}
+    .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .chart-card{border:1px solid #E1E8DD;border-radius:10px;padding:10px}
+    .chart-card h3{font-size:13px;margin:0 0 4px}.chart-card .leg{font-size:10px;color:#7C8C7E;margin:0 0 4px}
+    .chart-card svg{width:100%;height:auto}
+    .hbar-row{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:8px;font-size:12px;margin-bottom:6px}
+    .hbar-track{background:#F5F8F2;border-radius:6px;height:16px;overflow:hidden}.hbar-fill{height:100%;background:#2E8B43;border-radius:6px}
+    .hbar-val{font-weight:700}
+    .mat-list{display:flex;flex-wrap:wrap;gap:8px}.mat-item{display:flex;align-items:center;gap:6px;border:1px solid #E1E8DD;border-radius:8px;padding:6px 10px;font-size:12px}.mat-item .dot{width:10px;height:10px;border-radius:3px}.mat-item .kg{font-weight:700}.mat-item .u{font-size:9px;color:#7C8C7E;margin-left:2px}.mat-item .nm{color:#46584A}
+    .empty{color:#7C8C7E;font-size:13px;padding:10px}
+    @media print{body{padding:8px}.chart-card,.kpi{break-inside:avoid}}`;
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório KASFLOOR</title><style>${css}</style></head><body onload="window.print()">
+    <h1>KASFLOOR — Painel gerencial</h1>
+    <div style="font-size:12px;color:#46584A;margin-bottom:6px">Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+    <h2>Indicadores</h2><div class="kpi-grid">${$("relKpis").innerHTML}</div>
+    <h2>Evolução mensal</h2><div class="chart-grid">${$("relCharts").innerHTML}</div>
+    <h2>Faturamento por produto e vendedor</h2><div class="chart-grid">${$("relBreak").innerHTML}</div>
+    <h2>Necessidade de produção</h2>${$("relProd").innerHTML}
+  </body></html>`;
+  const w=window.open("","_blank"); if(!w){alert("Permita pop-ups para exportar o PDF.");return;} w.document.write(html); w.document.close();
+}
+function exportRelXls(){
+  const r=resumoGeral(),M=agregadoMensal();
+  const th=a=>`<tr>${a.map(x=>`<th style="background:#2E8B43;color:#fff;text-align:left;padding:6px 9px;border:1px solid #1E6B30">${x}</th>`).join("")}</tr>`;
+  const td=a=>`<tr>${a.map((x,i)=>`<td style="padding:5px 9px;border:1px solid #ccc;${i>0?'text-align:right;mso-number-format:\\@':''}">${x}</td>`).join("")}</tr>`;
+  let t=`<h3>Resumo geral</h3><table>`+th(["Indicador","Valor"])+td(["Faturamento",money(r.fat,2)])+td(["Custo de produção",money(r.custo,2)])+td(["Lucro",money(r.lucro,2)])+td(["Margem média",nf(r.margem,1)+"%"])+td(["Volume (m²)",nf(r.vol,2)])+td(["Pedidos",nf(r.ped,0)])+td(["Ticket médio",money(r.ticket,2)])+`</table>`;
+  t+=`<h3>Evolução mensal</h3><table>`+th(["Mês","Faturamento","Custo","Lucro","Margem %","Volume m²","Pedidos"])+M.map(x=>td([mesLabel(x.ym),money(x.fat,2),money(x.custo,2),money(x.fat-x.custo,2),nf(x.margem,1),nf(x.vol,2),nf(x.ped,0)])).join("")+`</table>`;
+  t+=`<h3>Faturamento por produto</h3><table>`+th(["Produto","Faturamento"])+fatPorProduto().map(p=>td([p[0],money(p[1],2)])).join("")+`</table>`;
+  t+=`<h3>Faturamento por vendedor</h3><table>`+th(["Vendedor","Faturamento"])+fatPorVendedor().map(p=>td([p[0],money(p[1],2)])).join("")+`</table>`;
+  const peds=DB.read("pedidos",[]).filter(p=>p.status==="em_producao"),tot={rf:0,rg:0,ad:0,res:0,pig:{}}; peds.forEach(p=>{const m=materialDoPedido(p);tot.rf+=m.rf;tot.rg+=m.rg;tot.ad+=m.ad;tot.res+=m.res;Object.entries(m.pig).forEach(([k,v])=>tot.pig[k]=(tot.pig[k]||0)+v);});
+  let pr=td(["Raspa fina",nf(tot.rf,2)])+td(["Raspa grossa",nf(tot.rg,2)])+(tot.ad>0?td(["Aditivo",nf(tot.ad,2)]):"")+td(["Resina",nf(tot.res,2)])+Object.entries(tot.pig).filter(([,v])=>v>0).map(([k,v])=>td(["Pigmento "+pigLabel(k),nf(v,2)])).join("");
+  t+=`<h3>Produção — material total (kg)</h3><table>`+th(["Material","Kg"])+pr+`</table>`;
+  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>table{border-collapse:collapse;margin-bottom:16px;font-family:Arial} h3{font-family:Arial;color:#1E6B30}</style></head><body>${t}</body></html>`;
+  const blob=new Blob(["﻿"+html],{type:"application/vnd.ms-excel"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="KASFLOOR-relatorio-"+new Date().toISOString().slice(0,10)+".xls"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+}
+$("btnRelPDF").addEventListener("click",exportRelPDF);
+$("btnRelXls").addEventListener("click",exportRelXls);
 
 /* ================================================================ INÍCIO ================================================================ */
 (function init(){ const s=DB.read("session",null); if(s){ const u=DB.read("users",USERS).find(x=>x.id===s.id); if(u){ SESSION=u; startApp(); return; } } })();
