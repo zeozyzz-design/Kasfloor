@@ -158,6 +158,19 @@
   .swatch{ width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; margin-right:5px; }
   .adit-toggle{ display:inline-flex; align-items:center; gap:7px; margin-top:10px; font-size:12.5px; color:var(--aditivo); font-weight:700; cursor:pointer; background:#E7F5F3; border:1px solid #BEE3DE; border-radius:8px; padding:6px 10px; }
   .adit-toggle input{ width:15px; height:15px; accent-color:var(--aditivo); }
+  .chk{ display:inline-flex; align-items:center; gap:5px; font-size:12.5px; margin-right:12px; color:var(--ink-2); }
+  .chk input{ width:14px; height:14px; accent-color:var(--brand); }
+  .prod-ctl{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px; }
+  @media (max-width:560px){ .prod-ctl{ grid-template-columns:1fr; } }
+  .pf label{ display:block; font-size:11px; color:var(--ink-dim); font-weight:700; margin-bottom:4px; }
+  .pf input{ width:100%; box-sizing:border-box; border:1px solid var(--line-strong); border-radius:8px; padding:7px 9px; font-family:var(--ui); background:var(--surface-2); }
+  .prod-resumo{ margin-top:8px; padding:8px 10px; background:var(--surface-2); border-radius:8px; }
+  .mat-edit{ display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  .me-row{ display:flex; align-items:center; gap:8px; font-size:12.5px; flex-wrap:wrap; }
+  .me-row .dot{ width:10px; height:10px; border-radius:3px; }
+  .me-row .me-nm{ min-width:120px; }
+  .me-row .me-plan{ color:var(--ink-dim); min-width:80px; }
+  .me-row input{ width:90px; text-align:right; border:1px solid var(--line-strong); border-radius:6px; padding:4px 7px; font-family:var(--display); background:var(--surface-2); }
 
   .kpi-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
   @media (max-width:900px){ .kpi-grid{ grid-template-columns:repeat(2,1fr); } }
@@ -323,6 +336,33 @@
     <div class="card"><h2>Necessidade de produção (pedidos em aberto)</h2><div id="relProd"></div></div>
   </section>
 
+  <!-- CONTROLE DE CUSTOS (master) -->
+  <section class="view" id="view-custos">
+    <div class="card"><div class="cfg-sec">Estoque atual</div><div class="scroll"><table class="grid" id="tblEstoque"></table></div>
+      <p class="note" id="estAlerta" style="margin-top:10px;display:none"></p></div>
+    <div class="card"><div class="cfg-sec">Entrada de material (NF)</div>
+      <div class="cfg-grid" id="formEntrada"></div>
+      <button class="btn sm" id="addEntradaBtn" style="margin-top:12px">Lançar entrada</button>
+      <div class="cfg-sec" style="margin-top:20px">Últimas entradas</div><div class="scroll"><table class="grid" id="tblEntradas"></table></div></div>
+    <div class="card"><div class="cfg-sec">Conferência física (fim do dia)</div>
+      <div class="cfg-grid" style="grid-template-columns:1fr"><div class="cfg-field"><label>Data da conferência</label><input class="ctrl" id="confData" type="date" style="max-width:200px"></div></div>
+      <div class="scroll" style="margin-top:8px"><table class="grid" id="tblConf"></table></div>
+      <button class="btn sm" id="salvarConfBtn" style="margin-top:12px">Salvar conferência</button>
+      <div id="confHist" style="margin-top:14px"></div></div>
+    <div class="card"><div class="cfg-sec">Máquinas</div>
+      <div class="cfg-grid" id="formMaquina"></div>
+      <button class="btn sm" id="addMaqBtn" style="margin-top:12px">Cadastrar máquina</button>
+      <div id="maqList" style="margin-top:14px"></div>
+      <p class="note" style="margin-top:10px">A meta (m²/h) de cada máquina é usada no PCP para comparar o planejado vs o tempo real de produção.</p></div>
+    <div class="card"><h2>Custo e desempenho por pedido</h2><p class="desc">Planejado vs real — tempo, ritmo (m²/h) e material.</p><div class="scroll"><table class="grid" id="tblCustoPedido"></table></div></div>
+    <div class="card"><div class="card-head"><div><h2>Dashboard de produção</h2><p class="desc" style="margin-bottom:0">Indicadores por período.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select class="ctrl" id="custoGran" style="max-width:130px"><option value="pedido">Por pedido</option><option value="dia">Por dia</option><option value="mes" selected>Por mês</option></select>
+        <input class="ctrl" id="custoDe" type="date" style="max-width:150px"><input class="ctrl" id="custoAte" type="date" style="max-width:150px"></div></div>
+      <div class="kpi-grid" id="custoKpis"></div>
+      <div class="chart-grid" id="custoCharts" style="margin-top:16px"></div></div>
+  </section>
+
   <!-- CONFIGURAÇÕES (master) -->
   <section class="view" id="view-config">
     <div class="note warn"><b>Margem de trabalho.</b> A margem alvo forma o preço de venda. Se o desconto do vendedor derrubar a margem abaixo da mínima, o orçamento fica <b>Aguardando aprovação</b> — só você libera.</div>
@@ -454,7 +494,7 @@ $("logoutBtn").addEventListener("click",()=>{ SESSION=null; DB.write("session",n
 function isMaster(){ return SESSION?.papel==="master"; }
 
 /* ================================================================ NAVEGAÇÃO ================================================================ */
-const TABS_MASTER=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["producao","PCP"],["tabela","Tabela de Preços"],["precos","Preços & Custos"],["relatorios","Relatórios"],["config","Configurações"]];
+const TABS_MASTER=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["producao","PCP"],["tabela","Tabela de Preços"],["precos","Preços & Custos"],["custos","Controle de Custos"],["relatorios","Relatórios"],["config","Configurações"]];
 const TABS_VEND=[["orcamentos","Orçamentos"],["pedidos","Pedidos"],["tabela","Tabela de Preços"]];
 function buildTabs(){
   const tabs=isMaster()?TABS_MASTER:TABS_VEND;
@@ -469,6 +509,7 @@ function showTab(tab){
   if(tab==="producao") renderProducao();
   if(tab==="tabela") renderTabela();
   if(tab==="precos") renderPrecos();
+  if(tab==="custos") renderCustos();
   if(tab==="relatorios") renderRelatorios();
   if(tab==="config") renderConfig();
 }
@@ -604,7 +645,10 @@ function carregarOrc(o){ orcItens=JSON.parse(JSON.stringify(o.itens)); editandoI
 function gerarPedido(o){
   const peds=DB.read("pedidos",[]);
   const num=(DB.read("seqPed",0))+1; DB.write("seqPed",num);
-  peds.unshift({ id:Date.now(), numero:num, orcamentoId:o.id, orcNumero:o.numero, data:new Date().toISOString(), cliente:o.cliente, regime:o.regime, vendedorNome:o.vendedorNome, itens:JSON.parse(JSON.stringify(o.itens)), vendaFinal:o.vendaFinal, custo:o.custo, status:"em_producao" });
+  const novo={ id:Date.now(), numero:num, orcamentoId:o.id, orcNumero:o.numero, data:new Date().toISOString(), cliente:o.cliente, regime:o.regime, vendedorNome:o.vendedorNome, itens:JSON.parse(JSON.stringify(o.itens)), vendaFinal:o.vendaFinal, custo:o.custo, status:"em_producao" };
+  novo.reserva=pedidoMateriais(novo);
+  novo.prod={status:"reservado",inicio:null,fim:null,maquinas:[],pecasFeitas:0,baixa:null};
+  peds.unshift(novo);
   DB.write("pedidos",peds);
   const lista=DB.read("orcamentos",[]); const oo=lista.find(x=>x.id===o.id); if(oo) oo.status="convertido"; DB.write("orcamentos",lista);
   renderOrcList(); alert("Pedido Nº "+num+" gerado. Já aparece em Pedidos"+(isMaster()?" e no PCP.":"."));
@@ -636,18 +680,51 @@ function matListHTML(m){
   return h+`</div>`;
 }
 function renderProducao(){
-  const peds=DB.read("pedidos",[]).filter(p=>p.status==="em_producao");
-  if(!peds.length){ $("prodTotal").innerHTML=`<div class="empty">Nenhum pedido em produção.</div>`; $("prodList").innerHTML=""; return; }
-  const tot={rf:0,rg:0,ad:0,res:0,pig:{}};
-  peds.forEach(p=>{ const m=materialDoPedido(p); tot.rf+=m.rf; tot.rg+=m.rg; tot.ad+=m.ad; tot.res+=m.res; Object.entries(m.pig).forEach(([k,v])=>tot.pig[k]=(tot.pig[k]||0)+v); });
-  $("prodTotal").innerHTML=matListHTML(tot);
-  $("prodList").innerHTML=peds.map(p=>{ const m=materialDoPedido(p); const itens=p.itens.map(it=>{const {m2,pc}=itemM2Pecas(it); return `${prodNome(it.produto)} ${corLabelItem(it)} ${espLabelItem(it)} — ${it.base==="m2"?nf(m2,2)+" m²":nf(pc)+" pç"}`;}).join("<br>");
-    return `<div class="row-item" style="align-items:flex-start"><div class="info"><div class="ti">Pedido Nº ${p.numero} · ${p.cliente.nome}</div><div class="meta" style="margin-top:6px;line-height:1.7">${itens}</div>
-      <label class="adit-toggle"><input type="checkbox" data-aditivo="${p.id}" ${p.aditivo?"checked":""}> Usar aditivo (divide a raspa grossa 50/50)</label></div>
-      <div style="min-width:220px">${matListHTML(m)}</div></div>`;
+  const peds=DB.read("pedidos",[]);
+  const ativos=peds.filter(p=>!p.prod || p.prod.status!=="concluido");
+  const tot={}; peds.forEach(p=>{ if(p.prod&&p.prod.status==="reservado"&&p.reserva) Object.entries(p.reserva).forEach(([k,v])=>tot[k]=(tot[k]||0)+v); });
+  $("prodTotal").innerHTML=Object.keys(tot).length?matChipsHTML(tot):`<div class="empty">Nenhum material reservado (sem pedidos aguardando início).</div>`;
+  if(!ativos.length){ $("prodList").innerHTML=`<div class="empty">Nenhum pedido em produção.</div>`; return; }
+  const maqs=DB.read("maquinas",[]);
+  $("prodList").innerHTML=ativos.map(p=>{
+    p.prod=p.prod||{status:"reservado",maquinas:[],pecasFeitas:0,baixa:null};
+    const {pc}=pedidoTotais(p);
+    const itensTxt=p.itens.map(it=>{const r=itemM2Pecas(it); return `${prodNome(it.produto)} ${corLabelItem(it)} ${espLabelItem(it)} — ${it.base==="m2"?nf(r.m2,2)+" m²":nf(r.pc)+" pç"}`;}).join("<br>");
+    let panel="";
+    if(p.prod.status==="reservado"){
+      panel=`<label class="adit-toggle"><input type="checkbox" data-aditivo="${p.id}" ${p.aditivo?"checked":""}> Usar aditivo (divide a raspa grossa 50/50)</label>
+       <div style="margin-top:10px"><b style="font-size:12px">Material reservado:</b>${matChipsHTML(p.reserva||pedidoMateriais(p))}</div>
+       <div style="margin-top:10px"><b style="font-size:12px">Máquinas:</b> ${maqs.length?maqs.map(mm=>`<label class="chk"><input type="checkbox" data-maq="${p.id}" data-maqid="${mm.id}" ${(p.prod.maquinas||[]).includes(mm.id)?"checked":""}> ${mm.nome}</label>`).join(""):'<span class="meta">cadastre máquinas no Controle de Custos</span>'}</div>
+       <button class="btn sm" data-iniciar="${p.id}" style="margin-top:12px">Iniciar produção</button>`;
+    } else if(p.prod.status==="produzindo"){
+      const mt=prodMetrics(p); const prog=pc>0?Math.min(100,(p.prod.pecasFeitas/pc)*100):0;
+      panel=`<div class="prod-ctl">
+        <div class="pf"><label>Início</label><input type="datetime-local" data-inicio="${p.id}" value="${toLocalInput(p.prod.inicio)}"></div>
+        <div class="pf"><label>Peças produzidas (de ${nf(pc)})</label><input type="number" step="any" data-pecas="${p.id}" value="${p.prod.pecasFeitas||""}"></div></div>
+       <div class="hbar-track" style="margin:8px 0;height:14px"><div class="hbar-fill" id="prog-${p.id}" style="width:${prog.toFixed(0)}%"></div></div>
+       <div style="margin-top:6px"><b style="font-size:12px">Máquinas:</b> ${maqs.length?maqs.map(mm=>`<label class="chk"><input type="checkbox" data-maq="${p.id}" data-maqid="${mm.id}" ${(p.prod.maquinas||[]).includes(mm.id)?"checked":""}> ${mm.nome}</label>`).join(""):'<span class="meta">—</span>'}</div>
+       <div style="margin-top:10px"><b style="font-size:12px">Material consumido (real, ajustável):</b>${matEditHTML(p)}</div>
+       <div id="resumo-${p.id}" class="prod-resumo">${resumoProdHTML(mt)}</div>
+       <div class="pf" style="margin-top:8px;max-width:260px"><label>Fim</label><input type="datetime-local" data-fim="${p.id}" value="${toLocalInput(p.prod.fim)}"></div>
+       <button class="btn sm" data-concluir="${p.id}" style="margin-top:10px">Concluir produção</button>`;
+    }
+    return `<div class="row-item" style="align-items:flex-start;flex-direction:column"><div class="info" style="width:100%"><div class="ti">Pedido Nº ${p.numero} · ${p.cliente.nome} ${statusBadge(p.prod.status)}</div><div class="meta" style="margin-top:6px;line-height:1.7">${itensTxt}</div>${panel}</div></div>`;
   }).join("");
 }
-$("prodList").addEventListener("change",e=>{ const c=e.target.closest("[data-aditivo]"); if(!c)return; const peds=DB.read("pedidos",[]); const p=peds.find(x=>x.id==c.dataset.aditivo); if(p){ p.aditivo=c.checked; DB.write("pedidos",peds); renderProducao(); } });
+$("prodList").addEventListener("click",e=>{ const ini=e.target.closest("[data-iniciar]"),con=e.target.closest("[data-concluir]"); if(ini) iniciarProducao(ini.dataset.iniciar); if(con) concluirProducao(con.dataset.concluir); });
+$("prodList").addEventListener("change",e=>{ const t=e.target,peds=DB.read("pedidos",[]);
+  if(t.matches("[data-aditivo]")){ const p=peds.find(x=>x.id==t.dataset.aditivo); if(p){ p.aditivo=t.checked; if(p.prod&&p.prod.status==="reservado") p.reserva=pedidoMateriais(p); DB.write("pedidos",peds); renderProducao(); } return; }
+  if(t.matches("[data-maq]")){ const p=peds.find(x=>x.id==t.dataset.maq); if(p){ p.prod=p.prod||{maquinas:[]}; p.prod.maquinas=p.prod.maquinas||[]; const id=+t.dataset.maqid; if(t.checked){ if(!p.prod.maquinas.includes(id)) p.prod.maquinas.push(id); } else p.prod.maquinas=p.prod.maquinas.filter(x=>x!==id); DB.write("pedidos",peds); renderProducao(); } return; }
+  if(t.matches("[data-inicio]")){ const p=peds.find(x=>x.id==t.dataset.inicio); if(p&&p.prod){ p.prod.inicio=fromLocalInput(t.value); DB.write("pedidos",peds); renderProducao(); } return; }
+  if(t.matches("[data-fim]")){ const p=peds.find(x=>x.id==t.dataset.fim); if(p&&p.prod){ p.prod.fim=fromLocalInput(t.value); DB.write("pedidos",peds); renderProducao(); } return; }
+});
+$("prodList").addEventListener("input",e=>{ const t=e.target,peds=DB.read("pedidos",[]);
+  if(t.matches("[data-pecas]")){ const p=peds.find(x=>x.id==t.dataset.pecas); if(p&&p.prod){ p.prod.pecasFeitas=parseFloat((t.value||"").replace(",","."))||0; DB.write("pedidos",peds); updateResumo(p); } return; }
+  if(t.matches("[data-real]")){ const p=peds.find(x=>x.id==t.dataset.real); if(p&&p.prod&&p.prod.baixa){ p.prod.baixa.real[t.dataset.mat]=parseFloat((t.value||"").replace(",","."))||0; DB.write("pedidos",peds); } return; }
+});
+function updateResumo(p){ const el=document.getElementById("resumo-"+p.id); if(el) el.innerHTML=resumoProdHTML(prodMetrics(p)); const {pc}=pedidoTotais(p); const prog=pc>0?Math.min(100,(p.prod.pecasFeitas/pc)*100):0; const bar=document.getElementById("prog-"+p.id); if(bar) bar.style.width=prog.toFixed(0)+"%"; }
+function iniciarProducao(id){ const peds=DB.read("pedidos",[]); const p=peds.find(x=>x.id==id); if(!p)return; p.prod=p.prod||{maquinas:[],pecasFeitas:0}; const plan=pedidoMateriais(p); p.prod.status="produzindo"; if(!p.prod.inicio)p.prod.inicio=new Date().toISOString(); p.prod.baixa={planejado:plan,real:JSON.parse(JSON.stringify(plan))}; DB.write("pedidos",peds); renderProducao(); }
+function concluirProducao(id){ const peds=DB.read("pedidos",[]); const p=peds.find(x=>x.id==id); if(!p||!p.prod)return; if(!p.prod.fim)p.prod.fim=new Date().toISOString(); p.prod.status="concluido"; DB.write("pedidos",peds); renderProducao(); }
 
 /* ================================================================ EXPORTAR PDF (impressão) ================================================================ */
 function exportarPDF(o){
@@ -955,6 +1032,148 @@ function exportRelXls(){
 }
 $("btnRelPDF").addEventListener("click",exportRelPDF);
 $("btnRelXls").addEventListener("click",exportRelXls);
+
+/* ================================================================ CONTROLE DE CUSTOS — MATERIAIS / ESTOQUE ================================================================ */
+function materiaisLista(){
+  const l=[{key:"raspaFina",label:"Raspa fina",sw:"var(--raspa-f)"},{key:"raspaGrossa",label:"Raspa grossa",sw:"var(--raspa-g)"},{key:"aditivo",label:"Aditivo",sw:"var(--aditivo)"},{key:"resina",label:"Resina",sw:"var(--resina)"}];
+  Object.keys(CONFIG.cores).forEach(c=>l.push({key:"pig:"+c,label:"Pigmento "+CONFIG.cores[c].label,sw:CONFIG.cores[c].sw}));
+  l.push({key:"pig:branco",label:"Pigmento Branco",sw:"#E3DFD3"});
+  return l;
+}
+function matLabel(k){ const m=materiaisLista().find(x=>x.key===k); return m?m.label:k; }
+function matSw(k){ const m=materiaisLista().find(x=>x.key===k); return m?m.sw:"var(--ink-dim)"; }
+function pedidoMateriais(p){ const m=materialDoPedido(p); const o={raspaFina:m.rf,raspaGrossa:m.rg,aditivo:m.ad,resina:m.res}; Object.entries(m.pig).forEach(([k,v])=>{ if(v>0) o["pig:"+k]=v; }); Object.keys(o).forEach(k=>{ if(!(o[k]>0)) delete o[k]; }); return o; }
+function pedidoTotais(p){ let m2=0,pc=0; p.itens.forEach(it=>{const r=itemM2Pecas(it);m2+=r.m2;pc+=r.pc;}); return {m2,pc}; }
+function estoqueEntradasTot(){ const e=DB.read("estoqueEntradas",[]),o={},c={}; e.forEach(x=>{ const q=+x.qtd||0; o[x.material]=(o[x.material]||0)+q; c[x.material]=(c[x.material]||0)+q*(+x.custo||0); }); return {qtd:o,custoTot:c}; }
+function consumoTot(){ const peds=DB.read("pedidos",[]),o={}; peds.forEach(p=>{ if(p.prod&&p.prod.baixa&&(p.prod.status==="produzindo"||p.prod.status==="concluido")) Object.entries(p.prod.baixa.real||{}).forEach(([k,v])=>o[k]=(o[k]||0)+(+v||0)); }); return o; }
+function reservaTot(){ const peds=DB.read("pedidos",[]),o={}; peds.forEach(p=>{ if(p.prod&&p.prod.status==="reservado"&&p.reserva) Object.entries(p.reserva).forEach(([k,v])=>o[k]=(o[k]||0)+(+v||0)); }); return o; }
+function saldoEstoque(){ const ent=estoqueEntradasTot(),cons=consumoTot(),resv=reservaTot(); const keys=new Set([...Object.keys(ent.qtd),...Object.keys(cons),...Object.keys(resv)]); const r={}; keys.forEach(k=>{ const e=ent.qtd[k]||0,co=cons[k]||0,re=resv[k]||0,saldo=e-co; r[k]={entrada:e,consumido:co,reservado:re,saldo,disp:saldo-re,custoMed:e>0?(ent.custoTot[k]||0)/e:0}; }); return r; }
+
+/* ===== PCP — helpers de apontamento ===== */
+function matChipsHTML(m){ const keys=Object.keys(m).filter(k=>m[k]>0); if(!keys.length)return'<span class="meta">—</span>'; return `<div class="mat-list" style="margin-top:6px">`+keys.map(k=>`<div class="mat-item"><span class="dot" style="background:${matSw(k)}"></span><span class="nm">${matLabel(k)}</span><span class="kg">${nf(m[k],2)}<span class="u">kg</span></span></div>`).join("")+`</div>`; }
+function matEditHTML(p){ const b=p.prod.baixa; if(!b)return""; return `<div class="mat-edit">`+Object.keys(b.planejado||{}).map(k=>`<div class="me-row"><span class="dot" style="background:${matSw(k)}"></span><span class="me-nm">${matLabel(k)}</span><span class="me-plan">plan ${nf(b.planejado[k],2)}</span><input type="number" step="any" data-real="${p.id}" data-mat="${k}" value="${b.real[k]!=null?(+b.real[k]):""}"><span class="u">kg</span></div>`).join("")+`</div>`; }
+function statusBadge(s){ return s==="reservado"?'<span class="badge wait">Reservado</span>':s==="produzindo"?'<span class="badge wait">Produzindo</span>':'<span class="badge ok">Concluído</span>'; }
+function toLocalInput(iso){ if(!iso)return""; const d=new Date(iso); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
+function fromLocalInput(v){ if(!v)return null; return new Date(v).toISOString(); }
+function prodMetrics(p){
+  const {m2,pc}=pedidoTotais(p), prod=p.prod||{}, maqsAll=DB.read("maquinas",[]);
+  const maqs=(prod.maquinas||[]).map(id=>maqsAll.find(m=>m.id==id)).filter(Boolean);
+  const rate=maqs.reduce((a,m)=>a+(+m.m2h||0),0);
+  const tempoPlanH=rate>0?m2/rate:0;
+  const ini=prod.inicio?new Date(prod.inicio):null, fim=prod.fim?new Date(prod.fim):(prod.status==="produzindo"?new Date():null);
+  const tempoRealH=(ini&&fim)?Math.max(0,(fim-ini)/3600000):0;
+  const pecasFeitas=+prod.pecasFeitas||0, m2Feito=pc>0?m2*(pecasFeitas/pc):0;
+  const realRate=tempoRealH>0?m2Feito/tempoRealH:0, pecasH=tempoRealH>0?pecasFeitas/tempoRealH:0;
+  const efic=rate>0&&realRate>0?realRate/rate*100:0;
+  return {m2,pc,rate,tempoPlanH,tempoRealH,pecasFeitas,m2Feito,realRate,pecasH,efic,maqs};
+}
+function resumoProdHTML(mt){ return `<span class="meta">Tempo plan <b>${mt.tempoPlanH>0?nf(mt.tempoPlanH,1)+"h":"—"}</b> · real <b>${mt.tempoRealH>0?nf(mt.tempoRealH,1)+"h":"—"}</b> · ritmo <b>${nf(mt.realRate,1)}</b>/${nf(mt.rate,1)} m²/h · ${nf(mt.pecasH,0)} pç/h · efic <b style="color:${mt.efic>=100?'var(--pos)':(mt.efic>=80||mt.efic===0?'var(--ink)':'var(--neg)')}">${mt.efic>0?nf(mt.efic,0)+"%":"—"}</b></span>`; }
+function materialDesvio(p){ const b=p.prod&&p.prod.baixa; if(!b)return{totalKg:0,itens:{}}; let tot=0; const it={},keys=new Set([...Object.keys(b.planejado||{}),...Object.keys(b.real||{})]); keys.forEach(k=>{ const d=(+b.real?.[k]||0)-(+b.planejado?.[k]||0); it[k]=d; tot+=d; }); return {totalKg:tot,itens:it}; }
+
+/* ===== CONTROLE DE CUSTOS — RENDER ===== */
+function renderEstoque(){
+  const s=saldoEstoque(),mats=materiaisLista(),alertas=[];
+  let h=`<thead><tr><th>Material</th><th style="text-align:right">Entradas</th><th style="text-align:right">Reservado</th><th style="text-align:right">Consumido</th><th style="text-align:right">Disponível</th><th style="text-align:right">Custo méd.</th><th style="text-align:right">Valor</th></tr></thead><tbody>`;
+  mats.forEach(m=>{ const r=s[m.key]||{entrada:0,reservado:0,consumido:0,saldo:0,disp:0,custoMed:0}, low=r.disp<-0.001; if(low)alertas.push(m.label);
+    h+=`<tr><td><span class="swatch" style="background:${m.sw}"></span>${m.label}</td><td style="text-align:right">${nf(r.entrada,1)}</td><td style="text-align:right">${nf(r.reservado,1)}</td><td style="text-align:right">${nf(r.consumido,1)}</td><td style="text-align:right;font-weight:700;color:${low?'var(--neg)':'var(--ink)'}">${nf(r.disp,1)}</td><td style="text-align:right">${money(r.custoMed,2)}</td><td style="text-align:right">${money(r.saldo*r.custoMed,0)}</td></tr>`; });
+  $("tblEstoque").innerHTML=h+`</tbody>`;
+  const al=$("estAlerta"); if(alertas.length){ al.style.display="block"; al.className="note warn"; al.innerHTML="<b>Atenção:</b> reservado acima do disponível — "+alertas.join(", ")+". Lance entrada (NF) para repor."; } else al.style.display="none";
+}
+function renderEntradaForm(){
+  $("formEntrada").innerHTML=`<div class="cfg-field"><label>Material</label><select class="ctrl" id="entMaterial">${materiaisLista().map(m=>`<option value="${m.key}">${m.label}</option>`).join("")}</select></div>
+   <div class="cfg-field"><label>Nº da NF</label><input class="ctrl" id="entNF" type="text" placeholder="Ex.: 12345"></div>
+   <div class="cfg-field"><label>Quantidade (kg)</label><input class="ctrl" id="entQtd" type="number" step="any" placeholder="0"></div>
+   <div class="cfg-field"><label>Custo (R$/kg)</label><input class="ctrl" id="entCusto" type="number" step="any" placeholder="0,00"></div>
+   <div class="cfg-field"><label>Fornecedor</label><input class="ctrl" id="entForn" type="text" placeholder="(opcional)"></div>
+   <div class="cfg-field"><label>Data</label><input class="ctrl" id="entData" type="date"></div>`;
+  $("entData").value=new Date().toISOString().slice(0,10);
+}
+function renderEntradas(){
+  const e=DB.read("estoqueEntradas",[]).slice().sort((a,b)=>(b.data||"").localeCompare(a.data||"")).slice(0,20);
+  if(!e.length){ $("tblEntradas").innerHTML=`<tbody><tr><td class="empty">Nenhuma entrada lançada.</td></tr></tbody>`; return; }
+  let h=`<thead><tr><th>Data</th><th>NF</th><th>Material</th><th style="text-align:right">Qtd (kg)</th><th style="text-align:right">R$/kg</th><th>Fornecedor</th><th></th></tr></thead><tbody>`;
+  e.forEach(x=>{ h+=`<tr><td>${x.data?x.data.split("-").reverse().join("/"):"—"}</td><td>${x.nf||"—"}</td><td>${matLabel(x.material)}</td><td style="text-align:right">${nf(x.qtd,1)}</td><td style="text-align:right">${money(x.custo||0,2)}</td><td>${x.fornecedor||"—"}</td><td style="text-align:right"><button class="btn ghost sm" data-delent="${x.id}" style="color:var(--neg);padding:4px 9px">×</button></td></tr>`; });
+  $("tblEntradas").innerHTML=h+`</tbody>`;
+}
+$("addEntradaBtn").addEventListener("click",()=>{
+  const material=$("entMaterial").value,nf2v=$("entNF").value.trim(),qtd=parseFloat(($("entQtd").value||"").replace(",",".")),custo=parseFloat(($("entCusto").value||"").replace(",","."))||0,forn=$("entForn").value.trim(),data=$("entData").value||new Date().toISOString().slice(0,10);
+  if(!(qtd>0)){ alert("Informe a quantidade (kg)."); return; }
+  const e=DB.read("estoqueEntradas",[]); e.push({id:Date.now(),material,nf:nf2v,qtd,custo,fornecedor:forn,data}); DB.write("estoqueEntradas",e);
+  $("entNF").value="";$("entQtd").value="";$("entCusto").value="";$("entForn").value="";
+  renderEstoque(); renderEntradas();
+});
+$("tblEntradas").addEventListener("click",e=>{ const d=e.target.closest("[data-delent]"); if(!d)return; if(confirm("Remover esta entrada?")){ DB.write("estoqueEntradas",DB.read("estoqueEntradas",[]).filter(x=>x.id!=d.dataset.delent)); renderEstoque(); renderEntradas(); } });
+function renderConf(){
+  const s=saldoEstoque(),mats=materiaisLista();
+  let h=`<thead><tr><th>Material</th><th style="text-align:right">Sistema (kg)</th><th style="text-align:right">Físico (kg)</th><th style="text-align:right">Diferença</th></tr></thead><tbody>`;
+  mats.forEach(m=>{ const sis=(s[m.key]?.saldo)||0; h+=`<tr><td><span class="swatch" style="background:${m.sw}"></span>${m.label}</td><td style="text-align:right">${nf(sis,1)}</td><td style="text-align:right"><input class="conf-fis" data-mat="${m.key}" type="number" step="any" placeholder="${nf(sis,1)}" style="width:96px;text-align:right;border:1px solid var(--line-strong);border-radius:6px;padding:5px 7px;font-family:var(--display);background:var(--surface-2)"></td><td style="text-align:right" data-dif="${m.key}">—</td></tr>`; });
+  $("tblConf").innerHTML=h+`</tbody>`;
+  if(!$("confData").value) $("confData").value=new Date().toISOString().slice(0,10);
+  renderConfHist();
+}
+$("tblConf").addEventListener("input",e=>{ const t=e.target; if(!t.classList.contains("conf-fis"))return; const k=t.dataset.mat,s=saldoEstoque(),sis=(s[k]?.saldo)||0,fis=parseFloat((t.value||"").replace(",","."))||0,dif=fis-sis; const cell=$("tblConf").querySelector('[data-dif="'+k+'"]'); if(cell){ cell.textContent=(dif>=0?"+":"")+nf(dif,1); cell.style.color=Math.abs(dif)<0.01?"var(--ink-2)":(dif<0?"var(--neg)":"var(--warn)"); } });
+$("salvarConfBtn").addEventListener("click",()=>{
+  const data=$("confData").value||new Date().toISOString().slice(0,10),s=saldoEstoque(),itens={};
+  $("tblConf").querySelectorAll(".conf-fis").forEach(inp=>{ const k=inp.dataset.mat,fis=parseFloat((inp.value||"").replace(",",".")); if(!isNaN(fis)) itens[k]={sistema:(s[k]?.saldo)||0,fisico:fis}; });
+  if(!Object.keys(itens).length){ alert("Informe ao menos um valor físico."); return; }
+  const c=DB.read("conferencias",[]); c.unshift({id:Date.now(),data,itens}); DB.write("conferencias",c); renderConfHist(); alert("Conferência salva.");
+});
+function renderConfHist(){
+  const c=DB.read("conferencias",[]).slice(0,5);
+  if(!c.length){ $("confHist").innerHTML=`<div class="meta">Nenhuma conferência salva.</div>`; return; }
+  $("confHist").innerHTML=c.map(x=>{ const difs=Object.entries(x.itens).filter(([,v])=>Math.abs(v.fisico-v.sistema)>=0.01),ok=!difs.length;
+    return `<div class="row-item" style="margin-bottom:6px;padding:10px 14px"><div class="info"><div class="ti" style="font-size:13px">${x.data.split("-").reverse().join("/")} ${ok?'<span class="badge ok">bateu</span>':'<span class="badge no">'+difs.length+' divergência(s)</span>'}</div>${difs.length?`<div class="meta">${difs.map(([k,v])=>matLabel(k)+": "+((v.fisico-v.sistema)>=0?"+":"")+nf(v.fisico-v.sistema,1)+"kg").join(" · ")}</div>`:""}</div></div>`; }).join("");
+}
+function renderMaqForm(){ $("formMaquina").innerHTML=`<div class="cfg-field"><label>Nome da máquina</label><input class="ctrl" id="maqNome" type="text" placeholder="Ex.: Prensa 01"></div><div class="cfg-field"><label>Meta de produção <span class="u">m²/hora</span></label><input class="ctrl" id="maqM2h" type="number" step="any" placeholder="0"></div>`; }
+function renderMaqList(){ const m=DB.read("maquinas",[]); if(!m.length){ $("maqList").innerHTML=`<div class="meta">Nenhuma máquina cadastrada.</div>`; return; }
+  $("maqList").innerHTML=m.map(x=>`<div class="row-item" style="margin-bottom:6px;padding:10px 14px"><div class="info"><div class="ti" style="font-size:14px">${x.nome}</div><div class="meta">Meta: ${nf(x.m2h,1)} m²/h</div></div><button class="btn danger sm" data-delmaq="${x.id}">Remover</button></div>`).join(""); }
+$("addMaqBtn").addEventListener("click",()=>{ const nome=$("maqNome").value.trim(),m2h=parseFloat(($("maqM2h").value||"").replace(",","."))||0; if(!nome){ alert("Informe o nome da máquina."); return; } const m=DB.read("maquinas",[]); m.push({id:Date.now(),nome,m2h}); DB.write("maquinas",m); $("maqNome").value="";$("maqM2h").value=""; renderMaqList(); });
+$("maqList").addEventListener("click",e=>{ const d=e.target.closest("[data-delmaq]"); if(!d)return; if(confirm("Remover esta máquina?")){ DB.write("maquinas",DB.read("maquinas",[]).filter(x=>x.id!=d.dataset.delmaq)); renderMaqList(); } });
+function renderCustoPedido(){
+  const peds=DB.read("pedidos",[]).filter(p=>p.prod&&(p.prod.status==="produzindo"||p.prod.status==="concluido"));
+  if(!peds.length){ $("tblCustoPedido").innerHTML=`<tbody><tr><td class="empty">Nenhum pedido em produção ou concluído.</td></tr></tbody>`; return; }
+  let h=`<thead><tr><th>Pedido</th><th>Status</th><th>Máquinas</th><th style="text-align:right">Tempo plan</th><th style="text-align:right">Tempo real</th><th style="text-align:right">m²/h plan</th><th style="text-align:right">m²/h real</th><th style="text-align:right">Efic.</th><th style="text-align:right">Material (real−plan)</th></tr></thead><tbody>`;
+  peds.forEach(p=>{ const mt=prodMetrics(p),des=materialDesvio(p),eficCol=mt.efic===0?'var(--ink)':(mt.efic>=100?'var(--pos)':(mt.efic>=80?'var(--ink)':'var(--neg)'));
+    h+=`<tr><td>Nº ${p.numero}<br><small>${p.cliente.nome}</small></td><td>${p.prod.status==="concluido"?'<span class="badge ok">Concluído</span>':'<span class="badge wait">Produzindo</span>'}</td><td>${mt.maqs.map(m=>m.nome).join(", ")||"—"}</td><td style="text-align:right">${mt.tempoPlanH>0?nf(mt.tempoPlanH,1)+"h":"—"}</td><td style="text-align:right">${mt.tempoRealH>0?nf(mt.tempoRealH,1)+"h":"—"}</td><td style="text-align:right">${nf(mt.rate,1)}</td><td style="text-align:right">${nf(mt.realRate,1)}</td><td style="text-align:right;color:${eficCol};font-weight:700">${mt.efic>0?nf(mt.efic,0)+"%":"—"}</td><td style="text-align:right;color:${Math.abs(des.totalKg)<0.01?'var(--ink-2)':(des.totalKg>0?'var(--neg)':'var(--pos)')}">${(des.totalKg>=0?"+":"")+nf(des.totalKg,1)} kg</td></tr>`; });
+  $("tblCustoPedido").innerHTML=h+`</tbody>`;
+}
+function custoDados(){ return DB.read("pedidos",[]).filter(p=>p.prod&&(p.prod.status==="produzindo"||p.prod.status==="concluido")).map(p=>{ const mt=prodMetrics(p),des=materialDesvio(p),date=(p.prod.fim||p.prod.inicio||p.data||"").slice(0,10); return {p,mt,des,date}; }); }
+function agrupaCusto(rows,gran){
+  if(gran==="pedido") return rows.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(r=>({label:"Nº"+r.p.numero,m2:r.mt.m2Feito,pc:r.mt.pecasFeitas,efic:r.mt.efic}));
+  const key=r=> gran==="dia"?r.date:r.date.slice(0,7),map={};
+  rows.forEach(r=>{ const k=key(r),a=map[k]||(map[k]={m2:0,pc:0,efL:[]}); a.m2+=r.mt.m2Feito; a.pc+=r.mt.pecasFeitas; if(r.mt.efic>0)a.efL.push(r.mt.efic); });
+  return Object.keys(map).sort().map(k=>({label:gran==="dia"?k.slice(8,10)+"/"+k.slice(5,7):mesLabel(k),m2:map[k].m2,pc:map[k].pc,efic:map[k].efL.length?map[k].efL.reduce((a,b)=>a+b,0)/map[k].efL.length:0}));
+}
+function renderCustosDash(){
+  const gran=$("custoGran").value,de=$("custoDe").value,ate=$("custoAte").value;
+  const rows=custoDados().filter(r=>r.date&&(!de||r.date>=de)&&(!ate||r.date<=ate));
+  let m2=0,pc=0,efSum=0,efN=0,tSum=0,tN=0,desvio=0;
+  rows.forEach(r=>{ m2+=r.mt.m2Feito; pc+=r.mt.pecasFeitas; if(r.mt.efic>0){efSum+=r.mt.efic;efN++;} if(r.mt.tempoRealH>0){tSum+=r.mt.tempoRealH;tN++;} desvio+=r.des.totalKg; });
+  const s=saldoEstoque(); let valEst=0,negN=0; Object.values(s).forEach(x=>{ valEst+=x.saldo*x.custoMed; if(x.disp<-0.001)negN++; });
+  $("custoKpis").innerHTML=[
+    ["Produção (m²)",nf(m2,0)+" m²",`${rows.length} pedido(s)`,""],
+    ["Peças produzidas",nf(pc,0),"no período",""],
+    ["Eficiência média",efN?nf(efSum/efN,0)+"%":"—","meta 100%",efN&&efSum/efN>=100?"pos":"neg"],
+    ["Tempo médio",tN?nf(tSum/tN,1)+"h":"—","por pedido",""],
+    ["Desvio de material",(desvio>=0?"+":"")+nf(desvio,1)+" kg",desvio>0.01?"acima do plan.":"dentro/abaixo",desvio>0.01?"neg":"pos"],
+    ["Valor de estoque",money(valEst,0),"saldo atual",""],
+    ["Materiais negativos",nf(negN,0),"reserva > disp.",negN>0?"neg":"pos"],
+    ["Pedidos no período",nf(rows.length,0),"",""],
+  ].map(k=>`<div class="kpi"><div class="lab">${k[0]}</div><div class="val">${k[1]}</div><div class="sub ${k[3]}">${k[2]}</div></div>`).join("");
+  const g=agrupaCusto(rows,gran),labels=g.map(x=>x.label);
+  const fM2=(v,ax)=>ax?nf(v,0):nf(v,0),fPc=(v)=>nf(v,0),fE=(v)=>nf(v,0)+"%";
+  $("custoCharts").innerHTML=[
+    ["Produção (m²)","barras por "+gran,chartSVG({type:"bar",labels,values:g.map(x=>x.m2),color:"var(--brand)",fmt:fM2,meta:null})],
+    ["Peças produzidas","barras por "+gran,chartSVG({type:"bar",labels,values:g.map(x=>x.pc),color:"var(--resina)",fmt:fPc,meta:null})],
+    ["Eficiência (%)","linha · meta 100%",chartSVG({type:"line",labels,values:g.map(x=>x.efic),color:"var(--raspa-f)",fmt:fE,meta:100})],
+  ].map(c=>`<div class="chart-card"><h3>${c[0]}</h3><p class="leg">${c[1]}</p>${c[2]}</div>`).join("");
+}
+function renderCustos(){
+  renderEstoque(); renderEntradaForm(); renderEntradas(); renderConf(); renderMaqForm(); renderMaqList(); renderCustoPedido();
+  if(!$("custoAte").value){ $("custoAte").value=new Date().toISOString().slice(0,10); const d=new Date(); d.setMonth(d.getMonth()-5); $("custoDe").value=d.toISOString().slice(0,10); }
+  renderCustosDash();
+}
+["custoGran","custoDe","custoAte"].forEach(id=>$(id).addEventListener("change",renderCustosDash));
 
 /* ================================================================ INÍCIO ================================================================ */
 (function init(){ const s=DB.read("session",null); if(s){ const u=DB.read("users",USERS).find(x=>x.id===s.id); if(u){ SESSION=u; startApp(); return; } } })();
